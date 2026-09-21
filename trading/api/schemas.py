@@ -1,0 +1,87 @@
+"""Pydantic schemas for the FastAPI endpoints."""
+
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class HealthResponse(BaseModel):
+    """Health check response declaring DEMO and PAPER mode."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = "ok"
+    environment: str = "DEMO"
+    trading_backend: str = "PAPER"
+
+
+class AccountResponse(BaseModel):
+    """Simulated paper account snapshot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    balance: float
+    equity: float
+    realized_pnl: float
+    unrealized_pnl: float
+    available_cash: float
+
+
+class PositionResponse(BaseModel):
+    """Simulated active position model."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    side: str
+    quantity: float
+    entry_price: float
+    current_price: float
+    unrealized_pnl: float
+    realized_pnl: float
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+
+
+class RiskStatusResponse(BaseModel):
+    """Non-secret risk engine and kill switch status."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kill_switch_active: bool
+    kill_switch_reason: Optional[str] = None
+    daily_loss_percent: float
+    open_positions: int
+    gross_exposure_percent: float
+    configured_limits: Dict[str, Any]
+    trading_mode: str = "DEMO/PAPER"
+
+
+class KillSwitchActivateRequest(BaseModel):
+    """Request payload to activate the emergency kill switch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(default="MANUAL_HALT", min_length=1)
+
+
+class KillSwitchResponse(BaseModel):
+    """Response returned upon kill switch state change."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    is_active: bool
+    reason: Optional[str] = None
+
+
+class SignalResponse(BaseModel):
+    """Response payload returned when a signal is submitted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    approved: bool
+    reason: Optional[str] = None
+    order: Optional[Dict[str, Any]] = None
+    signal_symbol: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
