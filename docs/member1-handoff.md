@@ -89,8 +89,11 @@ Known limitations:
 Dataset Location & Status:
 The raw dataset is located at `data/raw/eurusd_m15/eurusd_m15_raw.parquet`. Since development is now unified on Ubuntu, no network transfer is required.
 
+Real-Data Pipeline Validation:
+Executed: `uv run python scripts/validate_eurusd_m15.py`
+Status: PASS (100,000 candles verified with 0 duplicates, 0 OHLC violations, strictly monotonic chronological order).
+Processed dataset generated at: `data/processed/eurusd_m15/eurusd_m15_processed.parquet`.
+
 Next Action:
-Run Member 2's validation pipeline on Ubuntu against the real exported dataset:
-```bash
-uv run python scripts/validate_eurusd_m15.py
-```
+Proceed to Phase 4 — Exploratory Data Analysis (EDA) on the validated EURUSD M15 dataset.
+
