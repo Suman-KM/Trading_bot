@@ -58,6 +58,7 @@ def test_core_dependencies_importable(package_name: str) -> None:
     "submodule_name",
     [
         "ai",
+        "ai.data",
         "ai.features",
         "ai.models",
         "ai.training",
