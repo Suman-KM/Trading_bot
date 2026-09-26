@@ -52,6 +52,10 @@ logs/
 *.sqlite3
 *.db
 
+# Data
+data/raw/
+data/export/
+
 # Editor & OS
 .vscode/
 .idea/
