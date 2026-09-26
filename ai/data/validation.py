@@ -410,9 +410,8 @@ def validate_market_data(
     if vol_res.zero_tick_volume_count > 0:
         warnings.append(f"Observed {vol_res.zero_tick_volume_count} candles with zero tick volume.")
     if not vol_res.real_volume_all_zero:
-        warnings.append(
-            f"real_volume is non-zero in {round(100.0 - vol_res.real_volume_zero_percentage, 2)}% of candles."
-        )
+        pct = round(100.0 - vol_res.real_volume_zero_percentage, 2)
+        warnings.append(f"real_volume is non-zero in {pct}% of candles.")
 
     # 7. Total missing values
     missing_count = int(df.isna().sum().sum())

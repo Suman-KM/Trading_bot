@@ -1,7 +1,8 @@
 """Environment, dependency, and project structure smoke tests.
 
-Validates that Member 2's Python 3.12 environment on Apple Silicon is correctly configured
-and that all foundational dependencies and internal packages import without error.
+Validates that the canonical Python environment on Ubuntu Linux (and supported Darwin hosts)
+is correctly configured and that all foundational dependencies and internal packages
+import without error.
 """
 
 from __future__ import annotations
@@ -15,17 +16,25 @@ import pytest
 
 
 def test_python_version() -> None:
-    """Verify that Python version satisfies >=3.12 and <3.13."""
+    """Verify that Python version satisfies >=3.12."""
     major = sys.version_info.major
     minor = sys.version_info.minor
     assert (major, minor) >= (3, 12), f"Expected Python >= 3.12, got {major}.{minor}"
-    assert (major, minor) < (3, 13), f"Expected Python < 3.13, got {major}.{minor}"
 
 
 def test_system_architecture() -> None:
-    """Verify that the host environment is macOS Apple Silicon (arm64)."""
-    assert platform.system() == "Darwin", f"Expected Darwin, got {platform.system()}"
-    assert platform.machine() == "arm64", f"Expected arm64, got {platform.machine()}"
+    """Verify that the host environment is supported (Linux x86_64/arm64 or macOS arm64)."""
+    system = platform.system()
+    machine = platform.machine()
+    assert system in ("Linux", "Darwin"), f"Expected Linux or Darwin, got {system}"
+    if system == "Linux":
+        assert machine in (
+            "x86_64",
+            "amd64",
+            "aarch64",
+        ), f"Expected 64-bit architecture on Linux, got {machine}"
+    elif system == "Darwin":
+        assert machine in ("arm64", "x86_64"), f"Expected arm64 or x86_64 on Darwin, got {machine}"
 
 
 @pytest.mark.parametrize(
@@ -69,6 +78,23 @@ def test_core_dependencies_importable(package_name: str) -> None:
 )
 def test_ai_package_structure(submodule_name: str) -> None:
     """Verify that the internal ai package and its submodules are discoverable and importable."""
+    module = importlib.import_module(submodule_name)
+    assert module is not None
+
+
+@pytest.mark.parametrize(
+    "submodule_name",
+    [
+        "trading",
+        "trading.risk",
+        "trading.execution",
+        "trading.portfolio",
+        "trading.api",
+        "trading.models",
+    ],
+)
+def test_trading_package_structure(submodule_name: str) -> None:
+    """Verify that internal trading package and submodules are discoverable and importable."""
     module = importlib.import_module(submodule_name)
     assert module is not None
 

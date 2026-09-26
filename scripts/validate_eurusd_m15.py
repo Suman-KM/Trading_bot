@@ -2,7 +2,9 @@
 """EURUSD M15 Market Data Validation and Ingestion Pipeline CLI.
 
 Usage:
-    uv run python scripts/validate_eurusd_m15.py [--raw-path PATH] [--output-dir PATH] [--export-csv]
+    uv run python scripts/validate_eurusd_m15.py [--raw-path PATH]
+                                                [--output-dir PATH]
+                                                [--export-csv]
 
 If raw market data has not yet been imported from Member 1, the script reports:
 'RAW EURUSD M15 DATA NOT YET AVAILABLE LOCALLY — PIPELINE READY FOR DATA IMPORT.'
@@ -19,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from ai.data.ingestion import (
+from ai.data.ingestion import (  # noqa: E402
     generate_dataset_metadata,
     load_raw_dataset,
     process_and_validate,
@@ -128,13 +130,11 @@ def run_pipeline(
     print("Quality Checks:")
     print(f"  - Duplicate Timestamps:   {report.timestamps.duplicate_count}")
     print(f"  - Duplicate Rows:         {report.duplicate_rows_count}")
-    print(
-        f"  - Chronological Order:    {'PASS' if report.timestamps.is_strictly_monotonic else 'FAIL'}"
-    )
+    chrono_status = "PASS" if report.timestamps.is_strictly_monotonic else "FAIL"
+    print(f"  - Chronological Order:    {chrono_status}")
     print(f"  - OHLC Violations:        {report.ohlc.total_violations}")
-    print(
-        f"  - Invalid Prices (<=0/NaN): {report.ohlc.non_positive_prices_count + report.ohlc.nan_prices_count}"
-    )
+    inv_prices = report.ohlc.non_positive_prices_count + report.ohlc.nan_prices_count
+    print(f"  - Invalid Prices (<=0/NaN): {inv_prices}")
     print(f"  - Missing Values:         {report.missing_values_count}")
     print(f"  - Negative Spread:        {report.spread.negative_spread_count}")
     print(f"  - Zero Tick Volume:       {report.volume.zero_tick_volume_count}")
