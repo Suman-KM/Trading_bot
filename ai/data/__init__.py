@@ -5,6 +5,14 @@ schema verification, UTC timestamp normalization, OHLC integrity checks,
 gap classification, and dataset metadata management.
 """
 
+from ai.data.eda import (
+    compute_gap_statistics,
+    compute_price_statistics,
+    compute_temporal_statistics,
+    compute_volume_spread_statistics,
+    generate_eda_plots,
+    run_full_eda,
+)
 from ai.data.gaps import GapAnalysisResult, GapItem, analyze_gaps
 from ai.data.ingestion import (
     generate_dataset_metadata,
@@ -51,9 +59,15 @@ __all__ = [
     "VolumeValidationResult",
     "add_utc_timestamp",
     "analyze_gaps",
+    "compute_gap_statistics",
+    "compute_price_statistics",
+    "compute_temporal_statistics",
+    "compute_volume_spread_statistics",
+    "generate_eda_plots",
     "generate_dataset_metadata",
     "load_raw_dataset",
     "process_and_validate",
+    "run_full_eda",
     "save_dataset_metadata",
     "save_processed_dataset",
     "save_quality_report",

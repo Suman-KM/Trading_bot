@@ -76,6 +76,9 @@ data/external/**
 !data/external/**/.gitkeep
 data/export/
 
+# Research & EDA reports/figures (ignored)
+reports/
+
 # Model artifacts and serialized weights
 *.pkl
 *.joblib
