@@ -9,10 +9,13 @@ This document details the design, methodology, empirical results, and diagnostic
 - **Timeframe**: M15 (15-minute bars)
 - **Data Source**: MetaQuotes Ltd. / MetaQuotes-Demo (100,000 real bars, 2022-09-19 to 2026-02-19 UTC)
 - **Prediction Horizon**: $H = 4$ bars (60 minutes forward)
-- **Target Variable**: `direction_4` (Fixed-threshold ternary return classification at $\tau = 12.0$ pips / 0.00120)
-  - `SHORT (-1.0)`: Forward return $\le -0.00120$
-  - `NEUTRAL (0.0)`: Forward return $\in (-0.00120, +0.00120)$
-  - `LONG (+1.0)`: Forward return $\ge +0.00120$
+- **Target Variable**: `direction_4` (Fixed-threshold ternary return classification at fixed threshold 5.0 pips / 0.00050)
+  - target = `direction_4`
+  - horizon = H=4 (60 minutes forward)
+  - fixed threshold = 0.00050 (5.0 pips)
+  - LONG when ret_4 > +0.00050
+  - SHORT when ret_4 < -0.00050
+  - NEUTRAL when -0.00050 <= ret_4 <= +0.00050
 - **Feature Set**: 80 derived point-in-time features from Phase 5 (volatility, momentum, price action, volume, time encoding)
 - **Partitioning**: Chronological split with 4-bar purge buffer (Train: 69,937 rows / 70%, Validation: 14,983 rows / 15%, Test: 14,988 rows / 15%)
 - **Test Set Protection**: **STRICTLY ENFORCED**. The 14,988-row Test partition was **NEVER** loaded, inspected, predicted on, or evaluated. Validation is the sole out-of-sample evaluation partition.
@@ -189,8 +192,8 @@ Across all three balanced architectures:
 1. **Low Directional Precision**:
    Even with class weighting and moderate thresholding, directional precision remains between **25.6% and 27.4%**. Approximately 3 out of every 4 directional predictions are false positives (the market remained neutral or moved in the opposite direction).
 2. **Transaction Friction Deficit**:
-   On EURUSD M15, entering and exiting positions incurs bid-ask spread (typically 0.2–0.5 pips), broker commission ($3–$7 per round lot), and latency slippage. With a 12-pip take-profit target, a precision of 26% yields severe negative mathematical expectancy:
-   $$\mathbb{E}[\text{Return}] < 0.26 \times (+12.0) - 0.74 \times (\text{friction} + \text{loss}) < 0$$
+   On EURUSD M15, entering and exiting positions incurs bid-ask spread (typically 0.2–0.5 pips), broker commission ($3–$7 per round lot), and latency slippage. With a 5.0-pip target (fixed threshold = 0.00050), a precision of 26% yields severe negative mathematical expectancy:
+   $$\mathbb{E}[\text{Return}] < 0.26 \times (+5.0) - 0.74 \times (\text{friction} + \text{loss}) < 0$$
 3. **Execution Safety Boundaries**:
    These machine learning baselines are diagnostic statistical tools designed to measure feature signal content and class dynamics. They are **not** an end-to-end trading strategy.
 4. **Safety System Unchanged**:
