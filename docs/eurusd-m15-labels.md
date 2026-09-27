@@ -14,6 +14,8 @@
 
 In supervised quantitative machine learning for trading systems, learning models require well-defined future targets $y_t$. 
 
+> **Important Scope & Boundary:** Phase 6 defines candidate prediction targets. It does not establish predictive power, profitability, or trading viability. 
+
 At candle completion timestamp $t$:
 1. **Input Feature Vector $X_t$:** Evaluated strictly using historical and concurrent market data available at or before $t$ (from the Phase 5 80-feature library).
 2. **Prediction Output $\hat{y}_t$:** An algorithm forecasts future market dynamics over a forward horizon $H$.
@@ -96,14 +98,14 @@ Rather than picking arbitrary thresholds or artificially balancing classes, thre
 
 ### Empirical Rationale:
 1. **Statistical Consistency:** Across all horizons, the threshold represents approximately **$0.5 \times$ standard deviation** of the forward return distribution.
-2. **Economic Significance:** The threshold movement is **10 to 40 times larger than the average observed spread** (0.24 pips), ensuring that classified directional moves represent meaningful structural displacements rather than bid-ask bounce.
+2. **Representative Candidate Thresholds:** Candidate label thresholds are chosen as representative benchmark parameters relative to observed demo spread (0.24 pips), ensuring that classified directional moves represent meaningful structural displacements rather than bid-ask bounce. These thresholds are candidate research choices and are **not** economically optimal or proven profitable thresholds.
 3. **Neutral Noise Filtration:** The central band ($[-\tau, +\tau]$) filters out ~57%–60% of small drift intervals where directional trading would incur transaction costs without statistical expectation.
 
 ---
 
 ## 6. Cost-Aware & Spread Considerations
 
-Phase 4 EDA documented that while the MetaQuotes-Demo feed has an average recorded spread of 2.44 points (0.24 pips / 0.22 bps), spreads widen significantly during rollover (averaging 14.5 points at 00:00 UTC).
+Phase 4 EDA documented that the MetaQuotes-Demo broker feed has an average recorded spread of 2.44 points (0.24 pips / 0.22 bps) under quiet conditions, while spreads widen significantly during rollover (averaging 14.5 points at 00:00 UTC).
 
 | Horizon ($H$) | Mean Forward Return Magnitude ($E[|R_H|]$) | Mean Spread ($S_{\text{avg}}$) | Ratio $E[|R_H|] / S_{\text{avg}}$ |
 | :---: | :---: | :---: | :---: |
@@ -112,13 +114,14 @@ Phase 4 EDA documented that while the MetaQuotes-Demo feed has an average record
 | **8 bars** | 9.17 bps (9.17 pips) | 0.24 pips | **38.2x** |
 | **16 bars** | 13.25 bps (13.25 pips) | 0.24 pips | **55.2x** |
 
-*Crucial Caveat:* Raw forward return is not net profit. In live execution, round-trip trading costs include:
-- Entry spread + Exit spread
-- Execution slippage (especially during high-volatility news releases)
+*Crucial Caveat:* Raw forward return is not net profit, and candidate label thresholds are not proven profitable thresholds. Observed demo spread reflects the MetaQuotes-Demo broker feed under quiet conditions. In live or real-world execution, actual trading incurs:
+- Bid-ask spread (including dynamic widening during illiquid sessions)
+- Execution slippage (especially during high-volatility macroeconomic announcements)
 - Broker commissions
-- Financing overnight swap rates (for holds crossing 21:00 UTC)
+- Financing and rollover swap rates (for positions crossing 21:00 UTC)
+- Variable execution conditions and fill latency
 
-Therefore, single-bar targets ($H=1$) have an expected movement of ~3.2 pips, leaving a narrower margin against institutional execution costs than longer horizons ($H=8, 16$).
+These costs have **NOT** been modeled as a complete trading-cost model in Phase 6. Therefore, single-bar targets ($H=1$) have an expected movement of ~3.2 pips, leaving a narrower margin against real-world friction than longer horizons ($H=8, 16$).
 
 ---
 
@@ -153,7 +156,7 @@ The empirical class distributions across the full 100,000 candles show near-perf
 | **8 bars (120m)** | $1.41 \times \text{ATR}$ | 19,229 (19.23%) | 60,823 (60.84%) | 19,927 (19.93%) | 3.16 : 1 |
 | **16 bars (240m)** | $2.0 \times \text{ATR}$ | 20,194 (20.20%) | 58,955 (58.97%) | 20,822 (20.83%) | 2.92 : 1 |
 
-*Observation:* LONG and SHORT frequencies are almost identical (~20% vs ~20%), reflecting the empirical martingale-like symmetry of foreign exchange price discovery.
+*Observation:* The fixed-threshold labels produce approximately symmetric LONG and SHORT class frequencies across the tested horizons. This is a descriptive property of the constructed labels and does not establish martingale behavior or imply the presence or absence of predictive power.
 
 ---
 
@@ -229,14 +232,16 @@ A dedicated test suite in `tests/test_labels.py` validates all six core safety r
 ## 13. Limitations of the Target Design
 
 1. **Discrete Fixed Horizons:** Fixed-horizon targets evaluate price strictly at $t+H$, ignoring path dynamics (e.g. intra-horizon drawdown or maximum adverse excursion). Advanced triple-barrier labeling may be evaluated in subsequent research.
-2. **Demo Spread Modeling:** Spreads reflect MetaQuotes-Demo snapshot feeds. Fills at the exact mid/close price are theoretical approximations.
+2. **Demo Spread Modeling:** Spreads reflect MetaQuotes-Demo snapshot feeds under quiet conditions. Real-world execution friction (dynamic spreads, slippage, commissions, rollover swaps) is not modeled as a complete trading-cost model in this phase.
 3. **Unadjusted Weekend Boundary Overlaps:** Bars immediately preceding weekend closures have forward returns spanning the 48-hour weekend gap. Downstream models should account for weekend gap risks.
 
 ---
 
 ## 14. Why No Predictive Claims Are Made
 
+Phase 6 defines candidate prediction targets. It does not establish predictive power, profitability, or trading viability.
+
 Phase 6 is strictly **target construction and empirical documentation**:
 - Establishing target distributions does not demonstrate predictable edge.
-- Symmetrical class balances (~20% / ~60% / ~20%) are natural characteristics of Brownian-like price diffusions with symmetric thresholds.
+- The fixed-threshold labels produce approximately symmetric LONG and SHORT class frequencies across the tested horizons. This is a descriptive property of the constructed labels and does not establish martingale behavior or imply the presence or absence of predictive power.
 - Evaluating whether features $X_t$ can predict $y_t$ with statistically significant edge is reserved for formal machine learning baselines (Phase 7) and walk-forward validation (Phases 9–10).
