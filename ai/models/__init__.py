@@ -12,6 +12,18 @@ from ai.models.baselines import (
     MajorityClassClassifier,
     RandomForestBaseline,
 )
+from ai.models.diagnostics import (
+    compute_calibration_diagnostics,
+    compute_class_wise_metrics,
+    compute_confidence_coverage,
+    compute_error_analysis,
+    compute_lr_feature_importance,
+    compute_model_agreement,
+    compute_probability_diagnostics,
+    compute_rf_feature_importance,
+    compute_temporal_validation_diagnostics,
+    verify_feature_sanity,
+)
 from ai.models.evaluation import (
     ModelEvaluationResult,
     evaluate_classification_model,
@@ -24,7 +36,17 @@ __all__ = [
     "MajorityClassClassifier",
     "ModelEvaluationResult",
     "RandomForestBaseline",
+    "compute_calibration_diagnostics",
+    "compute_class_wise_metrics",
+    "compute_confidence_coverage",
+    "compute_error_analysis",
+    "compute_lr_feature_importance",
+    "compute_model_agreement",
+    "compute_probability_diagnostics",
+    "compute_rf_feature_importance",
+    "compute_temporal_validation_diagnostics",
     "evaluate_classification_model",
     "plot_and_save_confusion_matrix",
     "run_baseline_training_pipeline",
+    "verify_feature_sanity",
 ]
