@@ -138,11 +138,13 @@ class LogisticRegressionBaseline:
         max_iter: int = 1000,
         C: float = 1.0,
         solver: str = "lbfgs",
+        class_weight: str | dict | None = None,
     ) -> None:
         self.random_state = random_state
         self.max_iter = max_iter
         self.C = C
         self.solver = solver
+        self.class_weight = class_weight
 
         self.scaler_: StandardScaler | None = None
         self.model_: LogisticRegression | None = None
@@ -155,6 +157,7 @@ class LogisticRegressionBaseline:
             "max_iter": self.max_iter,
             "C": self.C,
             "solver": self.solver,
+            "class_weight": self.class_weight,
             "scaler": "StandardScaler",
         }
 
@@ -185,6 +188,7 @@ class LogisticRegressionBaseline:
             max_iter=self.max_iter,
             C=self.C,
             solver=self.solver,
+            class_weight=self.class_weight,
         )
         self.model_.fit(X_train_scaled, y_train)
         self.classes_ = self.model_.classes_
@@ -256,12 +260,14 @@ class RandomForestBaseline:
         n_estimators: int = 100,
         max_depth: int = 10,
         min_samples_leaf: int = 20,
+        class_weight: str | dict | None = None,
         random_state: int = 42,
         n_jobs: int = -1,
     ) -> None:
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.min_samples_leaf = min_samples_leaf
+        self.class_weight = class_weight
         self.random_state = random_state
         self.n_jobs = n_jobs
 
@@ -274,6 +280,7 @@ class RandomForestBaseline:
             "n_estimators": self.n_estimators,
             "max_depth": self.max_depth,
             "min_samples_leaf": self.min_samples_leaf,
+            "class_weight": self.class_weight,
             "random_state": self.random_state,
             "n_jobs": self.n_jobs,
         }
@@ -301,6 +308,7 @@ class RandomForestBaseline:
             n_estimators=self.n_estimators,
             max_depth=self.max_depth,
             min_samples_leaf=self.min_samples_leaf,
+            class_weight=self.class_weight,
             random_state=self.random_state,
             n_jobs=self.n_jobs,
         )
