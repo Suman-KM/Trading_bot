@@ -247,6 +247,29 @@ For multiclass Logistic Regression, the aggregate importance of feature $j$ is c
 - `ema_spread_10_40` (fast EMA minus slow EMA) has negative weight for SHORT (-0.394) and positive weight for LONG (+0.239), aligning with trend momentum physics.
 - `return_mean_5`, `candle_direction`, and `return_1` all exhibit symmetric opposite signs between SHORT and LONG.
 
+### 10.2 Sanity Audit of Time-Derived and Gap Features (`delta_seconds`, `cos_hour`, `hour`)
+
+An explicit sanity audit (Phase 9.1) verified the mathematical definitions and empirical distributions of time-derived features appearing in the top importance rankings:
+
+1. **`delta_seconds` (Rank 3 in Logistic Regression):**
+   - **Exact Formula:** $\Delta t_i = t_i - t_{i-1}$, where $t$ is the Unix timestamp (seconds) of the completed candle.
+   - **Nature:** It is strictly the **elapsed time between consecutive candle completions**, NOT an absolute timestamp, calendar position, or dataset index.
+   - **Empirical Distribution:**
+     - In **TRAIN** (69,937 rows): 99.7698% of rows equal exactly 900.0 seconds (15 minutes). The remaining 0.23% represent recurrent weekend gaps (~173,700s) and rare holiday closures (max: 260,100s).
+     - In **VALIDATION** (14,983 rows): 99.7531% of rows equal exactly 900.0 seconds. The remaining 0.25% represent weekend gaps (max: 177,300s).
+     - Median is 900.0s across both partitions; mean is 1,271.19s (Train) vs 1,269.90s (Validation).
+   - **Non-Monotonicity:** The feature does **not** monotonically increase (`is_monotonic_increasing: False`). It oscillates between 900s and weekend gap values across the entire multi-year timeline.
+   - **Why It Is Ranked:** Under `StandardScaler`, normal 900s bars have value $\approx -0.046$, while weekend reopen bars have value $\approx +21.5$. In the 2022–2025 training period, Sunday reopenings following macroeconomic events frequently experienced elevated volatility and non-neutral directional displacement, which the linear model captured via a positive SHORT coefficient (+0.467) and negative NEUTRAL coefficient (-0.191).
+   - **Leakage Status:** **SAFE**. It relies strictly on the current and preceding historical timestamps ($t_i, t_{i-1}$), is fully available at prediction time, and contains zero future information or dataset-position encoding.
+
+2. **`hour` (Rank 9 in RF) and `cos_hour` (Rank 4 in RF):**
+   - **Exact Formulas:** `hour` $= \text{UTC hour} \in [0, 23]$; `cos_hour` $= \cos(2\pi \cdot \text{hour} / 24) \in [-1.0, 1.0]$.
+   - **Nature:** Point-in-time harmonic encodings capturing diurnal FX volume and volatility cycles (Asian session consolidation vs London/NY overlap breakout regimes).
+   - **Leakage Status:** **SAFE**. They are deterministic functions of the completed candle's UTC hour, cycle perpetually every 24 hours, and encode zero absolute dataset position or future price movement.
+
+3. **Descriptive Nature of Feature Importance:**
+   - Feature importances reflect empirical statistical associations within the baseline model structures under the training distribution. They do **not** establish causal market relationships, predictive necessity, or operational trading viability.
+
 **Generated Artifacts:**
 - [`reports/logistic_regression_feature_importance.csv`](file:///home/cino/projects/ai-trading-system/reports/logistic_regression_feature_importance.csv)
 - [`reports/figures/logistic_regression_feature_importance_top20.png`](file:///home/cino/projects/ai-trading-system/reports/figures/logistic_regression_feature_importance_top20.png)
