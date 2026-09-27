@@ -77,6 +77,9 @@ data/external/**
 data/features/**
 !data/features/**/
 !data/features/**/.gitkeep
+data/labels/**
+!data/labels/**/
+!data/labels/**/.gitkeep
 data/export/
 
 # Research & EDA reports/figures (ignored)
