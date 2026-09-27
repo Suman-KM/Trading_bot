@@ -122,17 +122,18 @@ Chronological Timeline:
 
 ## 6. Exact Partition Sizes and Timestamp Boundaries
 
-### 6.1 Baseline Holdout (Purge Only, $H$ bars gap, Embargo = 0)
+### 6.1 Baseline Holdout (Purge Only: $H$ bars gap, Embargo = 0)
 
-| Horizon ($H$) | Target | Usable Rows ($N$) | Train Rows (70%) | Validation Rows (15%) | Test Rows (15%) | Total Purged |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: |
-| **$H=1$** | `direction_1` | 99,919 | 69,942 (70.00%) | 14,986 (15.00%) | 14,989 (15.00%) | 2 bars |
-| **$H=4$** | `direction_4` | 99,916 | 69,937 (70.00%) | 14,983 (15.00%) | 14,988 (15.00%) | 8 bars |
-| **$H=8$** | `direction_8` | 99,912 | 69,930 (69.99%) | 14,978 (14.99%) | 14,988 (15.00%) | 16 bars |
-| **$H=16$** | `direction_16` | 99,904 | 69,916 (69.98%) | 14,969 (14.98%) | 14,987 (15.00%) | 32 bars |
+| Horizon ($H$) | Target | Usable Rows ($N$) | Train Rows (70%) | Validation Rows (15%) | Test Rows (15%) | Purge Per Boundary ($H$) | Cumulative Purged Both Boundaries ($2H$) |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **$H=1$** | `direction_1` | 99,919 | 69,942 (70.00%) | 14,986 (15.00%) | 14,989 (15.00%) | 1 bar (15 min) | 2 bars (30 min) |
+| **$H=4$** | `direction_4` | 99,916 | 69,937 (70.00%) | 14,983 (15.00%) | 14,988 (15.00%) | 4 bars (60 min) | 8 bars (120 min) |
+| **$H=8$** | `direction_8` | 99,912 | 69,930 (69.99%) | 14,978 (14.99%) | 14,988 (15.00%) | 8 bars (120 min) | 16 bars (240 min) |
+| **$H=16$** | `direction_16` | 99,904 | 69,916 (69.98%) | 14,969 (14.98%) | 14,987 (15.00%) | 16 bars (240 min) | 32 bars (480 min) |
 
 ### 6.2 Timestamp Boundaries for Primary Horizon ($H=4$, Target: `direction_4`)
 
+#### Baseline (Purge Only: $H=4$, $E=0$):
 - **Train Partition (69,937 observations):**
   - Start: `2022-09-19 05:30:00 UTC`
   - End: `2025-07-14 04:30:00 UTC`
@@ -147,14 +148,35 @@ Chronological Timeline:
   - Start: `2026-02-19 12:00:00 UTC`
   - End: `2026-09-25 22:45:00 UTC`
 
-### 6.3 Enhanced Holdout (Purge = $H$, Embargo = $H$)
+#### Enhanced Configuration (Purge + Embargo: $H=4$, $E=4$):
+- **Train Partition (69,937 observations):**
+  - Start: `2022-09-19 05:30:00 UTC`
+  - End: `2025-07-14 04:30:00 UTC`
+- **Train $\to$ Validation Gap ($2H = 8$ bars / 120 minutes):**
+  - Purged bars (4): `04:45`, `05:00`, `05:15`, `05:30` on `2025-07-14`
+  - Embargoed bars (4): `05:45`, `06:00`, `06:15`, `06:30` on `2025-07-14`
+  - Excluded gap at boundary: 8 bars (120 minutes)
+  - Elapsed time between retained timestamps: `04:30 UTC` $\to$ `06:45 UTC` (2 hours 15 minutes)
+- **Validation Partition (14,979 observations):**
+  - Start: `2025-07-14 06:45:00 UTC`
+  - End: `2026-02-19 10:45:00 UTC`
+- **Validation $\to$ Test Gap ($2H = 8$ bars / 120 minutes):**
+  - Purged bars (4): `11:00`, `11:15`, `11:30`, `11:45` on `2026-02-19`
+  - Embargoed bars (4): `12:00`, `12:15`, `12:30`, `12:45` on `2026-02-19`
+  - Excluded gap at boundary: 8 bars (120 minutes)
+  - Elapsed time between retained timestamps: `10:45 UTC` $\to$ `13:00 UTC` (2 hours 15 minutes)
+- **Test Partition (14,984 observations):**
+  - Start: `2026-02-19 13:00:00 UTC`
+  - End: `2026-09-25 22:45:00 UTC`
 
-| Horizon ($H$) | Target | Train Rows | Validation Rows | Test Rows | Total Omitted Gap |
-| :---: | :--- | :---: | :---: | :---: | :---: |
-| **$H=1$** | `direction_1` | 69,942 | 14,985 | 14,988 | 4 bars (60 min) |
-| **$H=4$** | `direction_4` | 69,937 | 14,979 | 14,984 | 16 bars (240 min) |
-| **$H=8$** | `direction_8` | 69,930 | 14,970 | 14,980 | 32 bars (480 min) |
-| **$H=16$** | `direction_16` | 69,916 | 14,953 | 14,971 | 64 bars (960 min) |
+### 6.3 Enhanced Holdout Summary ($E = H$)
+
+| Horizon ($H$) | Target | Train Rows | Validation Rows | Test Rows | Excluded Gap Per Boundary ($2H$) | Cumulative Omitted Bars Both Boundaries ($4H$) |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: |
+| **$H=1$** | `direction_1` | 69,942 | 14,985 | 14,988 | **2 bars (30 min)** | **4 bars (60 min)** |
+| **$H=4$** | `direction_4` | 69,937 | 14,979 | 14,984 | **8 bars (120 min)** | **16 bars (240 min)** |
+| **$H=8$** | `direction_8` | 69,930 | 14,970 | 14,980 | **16 bars (240 min)** | **32 bars (480 min)** |
+| **$H=16$** | `direction_16` | 69,916 | 14,953 | 14,971 | **32 bars (480 min)** | **64 bars (960 min)** |
 
 ---
 

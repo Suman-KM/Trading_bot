@@ -198,6 +198,25 @@ class TestTemporalSplits:
         # Gap between val and test must be H (purge) + 8 (embargo) = 12 rows
         assert splits.test.start_index - splits.val.end_index == h + embargo
 
+    def test_enhanced_purge_plus_embargo_accounting(
+        self, default_assembled: AssembledDataset
+    ) -> None:
+        """Verifies exact 2H per-boundary gap and 4H cumulative omitted bars when E=H."""
+        h = 4
+        config = SplitConfig(purge_bars=h, embargo_bars=h)
+        splits = split_dataset(default_assembled, config=config)
+
+        # Per-boundary gap is exactly H (purge) + H (embargo) = 2H = 8 bars
+        tv_gap = splits.val.start_index - splits.train.end_index
+        vt_gap = splits.test.start_index - splits.val.end_index
+        assert tv_gap == 2 * h
+        assert vt_gap == 2 * h
+
+        # Cumulative omitted bars across both boundaries combined is exactly 4H = 16 bars
+        total_retained = len(splits.train) + len(splits.val) + len(splits.test)
+        total_omitted = splits.total_usable_rows - total_retained
+        assert total_omitted == 4 * h == 16
+
     def test_split_size_calculations(self, default_assembled: AssembledDataset) -> None:
         """Split sizes must match theoretical formula."""
         h = 4
