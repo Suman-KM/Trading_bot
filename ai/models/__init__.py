@@ -1,9 +1,30 @@
-"""Model definitions module.
+"""Baseline Machine Learning models package for EURUSD M15 directional forecasting.
 
-Contains model architectures and wrappers adhering to the defined model hierarchy:
-Model 0: Simple rule / heuristic baseline
-Model 1: Logistic Regression / Ridge
-Model 2: Random Forest
-Model 3: XGBoost
-Model 4+: Advanced architectures only if justified by statistical outperformance.
+Provides naive Majority Class reference, regularized Logistic Regression with strictly
+train-fitted scaling, and non-linear Random Forest baselines along with standardized
+validation metrics and test-set protection.
 """
+
+from __future__ import annotations
+
+from ai.models.baselines import (
+    LogisticRegressionBaseline,
+    MajorityClassClassifier,
+    RandomForestBaseline,
+)
+from ai.models.evaluation import (
+    ModelEvaluationResult,
+    evaluate_classification_model,
+    plot_and_save_confusion_matrix,
+)
+from ai.models.pipeline import run_baseline_training_pipeline
+
+__all__ = [
+    "LogisticRegressionBaseline",
+    "MajorityClassClassifier",
+    "ModelEvaluationResult",
+    "RandomForestBaseline",
+    "evaluate_classification_model",
+    "plot_and_save_confusion_matrix",
+    "run_baseline_training_pipeline",
+]
