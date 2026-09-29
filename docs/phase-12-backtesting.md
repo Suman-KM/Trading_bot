@@ -248,7 +248,7 @@ This is a critical finding that validates the integrity of Phase 10:
 In the 3-class distribution ($\text{SHORT}, \text{NEUTRAL}, \text{LONG}$), random/uninformed probability is $1/3 \approx 33.33\%$.
 The Random Forest model's directional confidence for $\text{SHORT}$ and $\text{LONG}$ peaks at $55.0\%$, with a mean of $45.68\%$. At the predefined threshold $\tau = 0.60$, directional predictions are **never** emitted. The only class that ever achieved $\ge 0.60$ probability was $\text{NEUTRAL}$ ($0.0$), which by rule generates no trade (`SignalAction.HOLD`).
 
-This is reported with complete honesty: the baseline strategy at $\tau = 0.60$ remains completely inert.
+The 0.60 confidence / 1.00× ATR SL / 1.50× ATR TP configuration remains the Phase 12 baseline. It generated zero trades because the selected model did not produce directional confidence at or above the 0.60 threshold during the validation period. The zero-trade result is reported as observed and is not used to justify parameter optimization.
 
 ---
 
@@ -308,9 +308,9 @@ To investigate behavior when the confidence filter permits trade execution, 10 p
 | **Combined** | 0.50 | 1.00 | 1.50 | 5.0 | 7.0 | 60 | 31.67% | 0.3506 | $-\$436.00$ | 0.45% | $-\$7.27$ | $\$292.28$ |
 
 ### Quantitative Findings from Sensitivity:
-1. **Low Win Rate / Negative Expectancy:** At $\tau = 0.50$, the strategy generates 60 trades over 7 months. The win rate is only $38.33\%$ and the profit factor is $0.5453$, losing $-\$258.10$ before commission or slippage.
+1. **Low Win Rate / Net Losses at $\tau = 0.50$:** At $\tau = 0.50$, the strategy generates 60 trades over 7 months. The win rate is only $38.33\%$ and the profit factor is $0.5453$, losing $-\$258.10$ before commission or slippage.
 2. **Impact of Frictions:** Adding realistic transaction frictions (0.5 pip slippage and $\$7/\text{lot}$ commission) increases total trading costs from $\$118.64$ to $\$292.28$, plunging the profit factor to $0.3506$ and net loss to $-\$436.00$.
-3. **Wider Stop Artifact:** Widening the stop loss to $1.25\times\text{ATR}$ produces a slight positive net PnL ($+\$59.28$) under zero friction, but this is an isolated mathematical artifact of holding positions longer, not robust alpha.
+3. **Sensitivity Analysis Findings (1.25× ATR Scenario):** The +$59.28 result observed under the 0.50 confidence, 1.25× ATR stop-loss, and 1.50× ATR take-profit sensitivity scenario is highly sensitive to the 4-bar maximum-holding-period rule and the small 59-trade validation sample. The trade-by-trade audit shows that changes from STOP_LOSS to MAX_HOLD and resulting position-occupancy/cooldown effects account for most of the P&L difference versus the 1.00× ATR scenario. This result is therefore not evidence of a persistent statistical trading edge or live profitability.
 
 ---
 
@@ -326,7 +326,7 @@ To investigate behavior when the confidence filter permits trade execution, 10 p
 ## 22. Financial Interpretation Guidance
 
 - **No Commercial Viability:** The directional accuracy of the ML baseline is insufficient to overcome bid-ask spread and transaction costs.
-- **Negative Mathematical Expectancy:** Empirical win rates ($31\%-38\%$) with $1.0\times\text{SL} / 1.5\times\text{TP}$ do not provide an edge in liquid FX markets.
+- **Empirical Execution Performance:** Empirical win rates ($31\%-38\%$) with $1.0\times\text{SL} / 1.5\times\text{TP}$ do not provide an edge in liquid FX markets under realistic transaction frictions.
 - **Risk Core Functionality:** The RiskEngine, KillSwitch, and position sizer behaved flawlessly, strictly preventing excessive drawdown or outsized exposures.
 
 ---
