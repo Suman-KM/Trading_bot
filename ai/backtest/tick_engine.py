@@ -94,6 +94,7 @@ class TickBacktestResult:
         confidence_filtered: int,
         trades_approved: int,
         intrabar_audit: list[dict[str, Any]],
+        unavailable_trades: list[dict[str, Any]] | None = None,
     ) -> None:
         self.config = config
         self.trade_ledger = trade_ledger
@@ -105,6 +106,7 @@ class TickBacktestResult:
         self.confidence_filtered = confidence_filtered
         self.trades_approved = trades_approved
         self.intrabar_audit = intrabar_audit
+        self.unavailable_trades = unavailable_trades if unavailable_trades is not None else []
 
     def to_trades_dataframe(self) -> pd.DataFrame:
         """Convert trade ledger into a structured pandas DataFrame."""
@@ -194,6 +196,7 @@ class TickBacktestEngine:
         trade_ledger: list[SimulatedTrade] = []
         equity_curve: list[EquityPoint] = []
         intrabar_audit: list[dict[str, Any]] = []
+        unavailable_trades: list[dict[str, Any]] = []
         rejections: dict[str, int] = {}
 
         total_signals_evaluated = 0
@@ -203,9 +206,6 @@ class TickBacktestEngine:
 
         # Pre-extract arrays
         timestamps = pd.to_datetime(df_market["timestamp"]).dt.to_pydatetime()
-        opens = df_market["open"].to_numpy(dtype=np.float64)
-        highs = df_market["high"].to_numpy(dtype=np.float64)
-        lows = df_market["low"].to_numpy(dtype=np.float64)
         closes = df_market["close"].to_numpy(dtype=np.float64)
         atrs = (
             df_market["atr_14"].to_numpy(dtype=np.float64)
@@ -220,7 +220,6 @@ class TickBacktestEngine:
 
         for i in range(n_bars):
             t_stamp = timestamps[i]
-            open_i = opens[i]
             close_i = closes[i]
             atr_i = atrs[i]
 
@@ -249,52 +248,88 @@ class TickBacktestEngine:
                 p_sig_time = pending_signal["signal_time"]
                 p_risk_amt = pending_signal["risk_amount"]
 
-                # Find the first available tick at or after bar i start
+                # Find the first available tick at or after bar i start within continuous coverage
                 entry_tick = self.tick_repo.get_first_tick_at_or_after(t_stamp)
-                if entry_tick is not None:
+                if entry_tick is None:
+                    # STRICT DATA INTEGRITY: Do not synthesize fake fills or jump gaps!
+                    unavailable_record = {
+                        "trade_id": trade_id_counter,
+                        "signal_time": p_sig_time.isoformat(),
+                        "bar_time": t_stamp.isoformat(),
+                        "direction": p_dir.value,
+                        "confidence": p_conf,
+                        "reason": "ENTRY_TICK_UNAVAILABLE",
+                        "status": "DATA_UNAVAILABLE",
+                    }
+                    unavailable_trades.append(unavailable_record)
+                    rejections["TICK_DATA_UNAVAILABLE"] = (
+                        rejections.get("TICK_DATA_UNAVAILABLE", 0) + 1
+                    )
+                    trade_record = SimulatedTrade(
+                        trade_id=trade_id_counter,
+                        symbol=self.strategy.symbol,
+                        signal_time=p_sig_time,
+                        entry_time=t_stamp,
+                        exit_time=t_stamp,
+                        direction=p_dir,
+                        confidence=p_conf,
+                        entry_price=0.0,
+                        exit_price=0.0,
+                        stop_loss=0.0,
+                        take_profit=0.0,
+                        quantity=p_qty,
+                        risk_amount=p_risk_amt,
+                        gross_pnl=0.0,
+                        spread_cost=0.0,
+                        commission=0.0,
+                        slippage=0.0,
+                        net_pnl=0.0,
+                        holding_bars=0,
+                        exit_reason=TradeExitReason.DATA_UNAVAILABLE,
+                        risk_decision="APPROVED",
+                        model_version=self.strategy.model_version,
+                    )
+                    trade_ledger.append(trade_record)
+                    trade_id_counter += 1
+                    pending_signal = None
+                else:
                     entry_bid = entry_tick.bid
                     entry_ask = entry_tick.ask
                     entry_spread_pts = entry_tick.spread_points
                     entry_time = entry_tick.timestamp
-                else:
-                    # Fallback to bar open if tick repo has gap
-                    entry_bid = open_i
-                    entry_ask = open_i + (self.config.default_spread_points * point_val)
-                    entry_spread_pts = self.config.default_spread_points
-                    entry_time = t_stamp
 
-                if p_dir == TradeDirection.LONG:
-                    # LONG enters at Ask + slippage
-                    fill_price = entry_ask + slippage_price
-                    sl_price = fill_price - p_stop_dist
-                    tp_price = fill_price + p_tp_dist
-                else:
-                    # SHORT enters at Bid - slippage
-                    fill_price = entry_bid - slippage_price
-                    sl_price = fill_price + p_stop_dist
-                    tp_price = fill_price - p_tp_dist
+                    if p_dir == TradeDirection.LONG:
+                        # LONG enters at Ask + slippage
+                        fill_price = entry_ask + slippage_price
+                        sl_price = fill_price - p_stop_dist
+                        tp_price = fill_price + p_tp_dist
+                    else:
+                        # SHORT enters at Bid - slippage
+                        fill_price = entry_bid - slippage_price
+                        sl_price = fill_price + p_stop_dist
+                        tp_price = fill_price - p_tp_dist
 
-                position = TickActivePosition(
-                    trade_id=trade_id_counter,
-                    symbol=self.strategy.symbol,
-                    direction=p_dir,
-                    quantity=p_qty,
-                    entry_price=fill_price,
-                    entry_time=entry_time,
-                    signal_time=p_sig_time,
-                    stop_loss=sl_price,
-                    take_profit=tp_price,
-                    confidence=p_conf,
-                    stop_distance=p_stop_dist,
-                    risk_amount=p_risk_amt,
-                    entry_bid=entry_bid,
-                    entry_ask=entry_ask,
-                    entry_spread_pts=entry_spread_pts,
-                    entry_bar_idx=i,
-                    slippage_entry=slippage_price,
-                )
-                trade_id_counter += 1
-                pending_signal = None
+                    position = TickActivePosition(
+                        trade_id=trade_id_counter,
+                        symbol=self.strategy.symbol,
+                        direction=p_dir,
+                        quantity=p_qty,
+                        entry_price=fill_price,
+                        entry_time=entry_time,
+                        signal_time=p_sig_time,
+                        stop_loss=sl_price,
+                        take_profit=tp_price,
+                        confidence=p_conf,
+                        stop_distance=p_stop_dist,
+                        risk_amount=p_risk_amt,
+                        entry_bid=entry_bid,
+                        entry_ask=entry_ask,
+                        entry_spread_pts=entry_spread_pts,
+                        entry_bar_idx=i,
+                        slippage_entry=slippage_price,
+                    )
+                    trade_id_counter += 1
+                    pending_signal = None
 
             # -------------------------------------------------------------
             # STEP 3: Check Exits on Bar i using Historical Ticks
@@ -410,59 +445,61 @@ class TickBacktestEngine:
                         first_event = "MAX_HOLD"
 
                 else:
-                    # Fallback to bar extremes if tick data is missing in this bar
-                    if position.direction == TradeDirection.LONG:
-                        touched_sl = lows[i] <= position.stop_loss
-                        touched_tp = highs[i] >= position.take_profit
-                        if touched_sl:
-                            exited = True
-                            exit_reason = TradeExitReason.STOP_LOSS
-                            exit_bid = min(open_i, position.stop_loss)
-                        elif touched_tp:
-                            exited = True
-                            exit_reason = TradeExitReason.TAKE_PROFIT
-                            exit_bid = max(open_i, position.take_profit)
-                        elif is_max_hold_bar:
-                            exited = True
-                            exit_reason = TradeExitReason.MAX_HOLD
-                            exit_bid = close_i
-                    else:
-                        sp_est = self.config.default_spread_points * point_val
-                        touched_sl = (highs[i] + sp_est) >= position.stop_loss
-                        touched_tp = (lows[i] + sp_est) <= position.take_profit
-                        if touched_sl:
-                            exited = True
-                            exit_reason = TradeExitReason.STOP_LOSS
-                            exit_ask = max(open_i, position.stop_loss)
-                        elif touched_tp:
-                            exited = True
-                            exit_reason = TradeExitReason.TAKE_PROFIT
-                            exit_ask = min(open_i, position.take_profit)
-                        elif is_max_hold_bar:
-                            exited = True
-                            exit_reason = TradeExitReason.MAX_HOLD
-                            exit_ask = close_i + sp_est
+                    # STRICT DATA INTEGRITY: No tick data in bar. DO NOT use candle extremes!
+                    exited = True
+                    exit_reason = TradeExitReason.DATA_UNAVAILABLE
+                    exit_tick_time = t_stamp
+                    exit_bid = position.entry_bid
+                    exit_ask = position.entry_ask
+                    exit_spread_pts = position.entry_spread_pts
+                    first_event = "DATA_UNAVAILABLE"
+                    unavailable_record = {
+                        "trade_id": position.trade_id,
+                        "signal_time": position.signal_time.isoformat(),
+                        "entry_time": position.entry_time.isoformat(),
+                        "bar_time": t_stamp.isoformat(),
+                        "direction": position.direction.value,
+                        "reason": "HOLDING_TICKS_UNAVAILABLE",
+                        "status": "DATA_UNAVAILABLE",
+                    }
+                    unavailable_trades.append(unavailable_record)
+                    rejections["TICK_DATA_UNAVAILABLE"] = (
+                        rejections.get("TICK_DATA_UNAVAILABLE", 0) + 1
+                    )
 
                 # Process Completed Exit
                 if exited:
-                    if position.direction == TradeDirection.LONG:
-                        # LONG sells at Bid - slippage
-                        eff_exit_price = exit_bid - slippage_price
-                        p_diff = eff_exit_price - position.entry_price
-                        spread_cost = position.quantity * (position.entry_ask - position.entry_bid)
+                    if exit_reason == TradeExitReason.DATA_UNAVAILABLE:
+                        eff_exit_price = position.entry_price
+                        p_diff = 0.0
+                        spread_cost = 0.0
+                        tot_comm = 0.0
+                        slippage_cost = 0.0
+                        net_pnl = 0.0
+                        gross_pnl = 0.0
                     else:
-                        # SHORT buys at Ask + slippage
-                        eff_exit_price = exit_ask + slippage_price
-                        p_diff = position.entry_price - eff_exit_price
-                        spread_cost = position.quantity * (exit_ask - exit_bid)
+                        if position.direction == TradeDirection.LONG:
+                            # LONG sells at Bid - slippage
+                            eff_exit_price = exit_bid - slippage_price
+                            p_diff = eff_exit_price - position.entry_price
+                            spread_cost = position.quantity * (
+                                position.entry_ask - position.entry_bid
+                            )
+                        else:
+                            # SHORT buys at Ask + slippage
+                            eff_exit_price = exit_ask + slippage_price
+                            p_diff = position.entry_price - eff_exit_price
+                            spread_cost = position.quantity * (exit_ask - exit_bid)
 
-                    lot_ratio = position.quantity / self.config.lot_size
-                    tot_comm = lot_ratio * self.config.commission_per_lot
-                    slippage_cost = position.quantity * (position.slippage_entry + slippage_price)
-                    net_pnl = (p_diff * position.quantity) - tot_comm
-                    gross_pnl = net_pnl + spread_cost + slippage_cost + tot_comm
+                        lot_ratio = position.quantity / self.config.lot_size
+                        tot_comm = lot_ratio * self.config.commission_per_lot
+                        slippage_cost = position.quantity * (
+                            position.slippage_entry + slippage_price
+                        )
+                        net_pnl = (p_diff * position.quantity) - tot_comm
+                        gross_pnl = net_pnl + spread_cost + slippage_cost + tot_comm
 
-                    cash_balance += net_pnl
+                        cash_balance += net_pnl
 
                     completed_trade = SimulatedTrade(
                         trade_id=position.trade_id,
@@ -664,4 +701,5 @@ class TickBacktestEngine:
             confidence_filtered=confidence_filtered,
             trades_approved=trades_approved,
             intrabar_audit=intrabar_audit,
+            unavailable_trades=unavailable_trades,
         )

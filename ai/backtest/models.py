@@ -31,6 +31,7 @@ class TradeExitReason(str, Enum):
     DAILY_RISK_POLICY = "DAILY_RISK_POLICY"
     KILL_SWITCH = "KILL_SWITCH"
     END_OF_DATA = "END_OF_DATA"
+    DATA_UNAVAILABLE = "DATA_UNAVAILABLE"
 
 
 class BacktestConfig(BaseModel):
