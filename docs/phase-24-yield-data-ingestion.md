@@ -4,8 +4,8 @@
 **Project:** AI Autonomous Trading System  
 **Repository:** `~/projects/ai-trading-system`  
 **Branch:** `develop`  
-**Current Commit:** `c5c506a` (`research: audit exogenous data feasibility`)  
-**Status:** COMPLETE — CLASSIFICATION: `PARTIALLY READY`
+**Current Commit:** `de099a2` (`research: ingest and validate historical yield data`)  
+**Status:** COMPLETE — CLASSIFICATION: `READY FOR PHASE 25` (Formally Verified & Approved in Phase 24.1)
 
 ---
 
@@ -305,16 +305,15 @@ Summary of empirical findings serialized to [`reports/phase24_yield_data_validat
 
 ## 15. Future Phase 25 Experiment Readiness
 
-### Classification: **`PARTIALLY READY`**
+### Classification: **`READY FOR PHASE 25`**
 
 ### Evidence-Based Justification:
 - **Causality & Data Pipeline:** 100% functional, verified, and completely leak-free across 25,800 H4 bars.
 - **Provenance & Integrity:** Cryptographic SHA-256 hashes generated from official artifacts and confirmed by automated tests.
-- **Why NOT `READY FOR PHASE 25` Yet:**
-  The project governance rules state:
-  > *"Do not claim 'READY FOR PHASE 25' if source substitutions were required without justification."*
+- **Formal Governance Approval (Phase 24.1):**  
+  > *Phase 23 contained an incorrect series identifier. Phase 24.1 verified and approved the corrected official Bundesbank series (`BBSIS.D.I.ZAR.ZI.EUR.S1311.B.A604.R02XX.R.A.A._Z._Z.A`).*
   
-  Because Phase 23 specified `IRLTLT01DEM156N`, and Phase 24 discovered that this series was a monthly 10-year yield rather than a daily 2-year yield, substituting the Deutsche Bundesbank series (`BBSIS.D.I.ZAR.ZI.EUR.S1311.B.A604.R02XX.R.A.A._Z._Z.A`) was an essential correction. The pipeline is classified as **`PARTIALLY READY`** pending formal approval of this corrected series identifier for the Phase 25 H4 macro-regime experiment.
+  With Phase 24.1 formally approving this series based on explicit official Deutsche Bundesbank metadata confirming 2.0-year residual maturity (`RLZ 2 Jahre` / `R02XX`) and daily frequency (`P1D`), the dataset is fully validated and ready for the future Phase 25 macro-regime experiment.
 
 ---
 
