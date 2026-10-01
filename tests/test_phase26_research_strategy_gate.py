@@ -34,6 +34,7 @@ ALLOWED_FEASIBILITY_STATUSES = {
 
 EXPECTED_PHASES = [
     "Phase 8",
+    "Phase 9",
     "Phase 10",
     "Phase 11",
     "Phase 12",
