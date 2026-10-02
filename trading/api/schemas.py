@@ -108,6 +108,11 @@ class ReadinessResponse(BaseModel):
     mt5_execution_enabled: bool = False
     mt5_readonly_connected: bool = False
     mt5_market_data_available: bool = False
+    mt5_demo_account_verified: bool = False
+    mt5_live_account_detected: bool = False
+    mt5_trade_permissions_verified: bool = False
+    mt5_symbol_verified: bool = False
+    reconciliation_healthy: bool = True
     recovery_error: Optional[str] = None
     environment: str = "DEMO"
     trading_backend: str = "PAPER"

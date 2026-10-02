@@ -16,7 +16,7 @@ from trading.execution.capabilities import (
     BrokerCapabilities,
 )
 from trading.execution.costs import TransactionCostConfig
-from trading.execution.mt5_adapter import (
+from trading.execution.exceptions import (
     MT5ConnectionError,
     MT5ResponseError,
 )

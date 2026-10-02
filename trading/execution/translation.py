@@ -48,6 +48,7 @@ class MT5TradeRequest(BaseModel):
     type_filling: int = Field(MT5_ORDER_FILLING_FOK, description="Execution policy")
     type_time: int = Field(MT5_ORDER_TIME_GTC, description="Order expiration type")
     comment: Optional[str] = Field(None, description="Trade comment / client ID tag")
+    position: int = Field(0, description="Position ticket for closing/modifying (0 for new orders)")
     client_request_id: Optional[str] = Field(
         None, description="Idempotent client request identifier"
     )
@@ -60,6 +61,7 @@ def translate_order_to_mt5_request(
     magic: int = 100001,
     deviation: int = 20,
     current_market_price: Optional[float] = None,
+    position: int = 0,
 ) -> MT5TradeRequest:
     """Translate an internal Order to an MT5TradeRequest without altering intent or risk.
 
@@ -118,6 +120,7 @@ def translate_order_to_mt5_request(
         type_filling=MT5_ORDER_FILLING_FOK,
         type_time=MT5_ORDER_TIME_GTC,
         comment=comment_tag,
+        position=position,
         client_request_id=order.client_request_id,
         internal_order_id=order.order_id,
     )

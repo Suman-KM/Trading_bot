@@ -1,4 +1,4 @@
-"""MT5 read-only adapter module."""
+"""MetaTrader 5 adapter package with demo execution and safety transports."""
 
 from trading.adapters.mt5.client import MT5_TIMEFRAME_MAP, MT5ReadOnlyClient
 from trading.adapters.mt5.normalizer import (
@@ -11,12 +11,37 @@ from trading.adapters.mt5.normalizer import (
     normalize_tick,
     normalize_timestamp,
 )
+from trading.adapters.mt5.reconciliation import (
+    PositionReconciliationError,
+    ReconciliationItem,
+    ReconciliationReport,
+    ReconciliationStatus,
+    reconcile_positions,
+)
+from trading.adapters.mt5.safety import (
+    ACCOUNT_TRADE_MODE_CONTEST,
+    ACCOUNT_TRADE_MODE_DEMO,
+    ACCOUNT_TRADE_MODE_REAL,
+    DEMO_ONLY,
+    AccountTradeMode,
+    DemoAccountVerificationError,
+    DemoAccountVerifier,
+    DemoExecutionNotAuthorizedError,
+    DemoVerificationReport,
+    LiveAccountForbiddenError,
+    assert_demo_execution_authorized,
+)
 from trading.adapters.mt5.schemas import (
     MT5AccountMetadata,
     MT5BarData,
     MT5TerminalMetadata,
     MT5TickData,
     MT5Timeframe,
+)
+from trading.adapters.mt5.transport import (
+    MT5DemoExecutionTransport,
+    MT5ExecutionResponse,
+    MT5ExecutionStatus,
 )
 from trading.execution.mt5_simulator import (
     SimulatedBrokerResponse,
@@ -26,14 +51,36 @@ from trading.execution.mt5_simulator import (
 )
 
 __all__ = [
+    "ACCOUNT_TRADE_MODE_CONTEST",
+    "ACCOUNT_TRADE_MODE_DEMO",
+    "ACCOUNT_TRADE_MODE_REAL",
+    "AccountTradeMode",
+    "DEMO_ONLY",
+    "DemoAccountVerificationError",
+    "DemoAccountVerifier",
+    "DemoExecutionNotAuthorizedError",
+    "DemoVerificationReport",
+    "LiveAccountForbiddenError",
     "MT5AccountMetadata",
     "MT5BarData",
     "MT5DataNormalizationError",
+    "MT5DemoExecutionTransport",
+    "MT5ExecutionResponse",
+    "MT5ExecutionStatus",
     "MT5ReadOnlyClient",
     "MT5TerminalMetadata",
     "MT5TickData",
     "MT5Timeframe",
     "MT5_TIMEFRAME_MAP",
+    "PositionReconciliationError",
+    "ReconciliationItem",
+    "ReconciliationReport",
+    "ReconciliationStatus",
+    "SimulatedBrokerResponse",
+    "SimulatedMT5BrokerAdapter",
+    "SimulatedMT5Transport",
+    "SimulatedResponseStatus",
+    "assert_demo_execution_authorized",
     "mask_login",
     "normalize_account_info",
     "normalize_bar",
@@ -41,8 +88,5 @@ __all__ = [
     "normalize_terminal_info",
     "normalize_tick",
     "normalize_timestamp",
-    "SimulatedBrokerResponse",
-    "SimulatedMT5BrokerAdapter",
-    "SimulatedMT5Transport",
-    "SimulatedResponseStatus",
+    "reconcile_positions",
 ]

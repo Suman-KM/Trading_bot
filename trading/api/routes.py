@@ -234,6 +234,40 @@ def get_readiness(
         portfolio_valid = account is not None and account.equity > 0
         kill_switch_active = kill_switch.is_active() if kill_switch else True
 
+        # 6. MT5 adapter diagnostics
+        mt5_demo_verified = False
+        mt5_live_detected = False
+        mt5_trade_perm = False
+        mt5_symbol_ver = False
+        reconciliation_ok = True
+
+        mt5_adp = getattr(context, "mt5_adapter", None)
+        if mt5_adp is not None:
+            ro_client = getattr(mt5_adp, "readonly_client", None)
+            if ro_client and ro_client.is_connected:
+                try:
+                    acc_meta = ro_client.get_account_metadata()
+                    if acc_meta:
+                        mt5_live_detected = acc_meta.trade_mode == 2
+                        mt5_demo_verified = acc_meta.trade_mode == 0 and acc_meta.is_demo
+                        mt5_trade_perm = getattr(acc_meta, "trade_allowed", True) and getattr(
+                            acc_meta, "trade_expert", True
+                        )
+                except Exception:
+                    pass
+                try:
+                    sym_spec = mt5_adp.get_symbol_info("EURUSD")
+                    if sym_spec and sym_spec.min_volume > 0:
+                        mt5_symbol_ver = True
+                except Exception:
+                    pass
+            if hasattr(mt5_adp, "reconcile"):
+                try:
+                    rec_rep = mt5_adp.reconcile()
+                    reconciliation_ok = rec_rep.healthy
+                except Exception:
+                    reconciliation_ok = False
+
         is_ready = (
             broker is not None
             and risk_engine is not None
@@ -292,6 +326,11 @@ def get_readiness(
         mt5_market_data_available=bool(
             getattr(getattr(context, "mt5_adapter", None), "market_data_available", False)
         ),
+        mt5_demo_account_verified=mt5_demo_verified,
+        mt5_live_account_detected=mt5_live_detected,
+        mt5_trade_permissions_verified=mt5_trade_perm,
+        mt5_symbol_verified=mt5_symbol_ver,
+        reconciliation_healthy=reconciliation_ok,
         recovery_error=context.recovery_error,
         environment="DEMO",
         trading_backend="PAPER",

@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -24,7 +25,7 @@ from trading.adapters.mt5.schemas import (
     MT5Timeframe,
 )
 from trading.execution.capabilities import UnsupportedBrokerOperationError
-from trading.execution.mt5_adapter import BrokerExecutionDisabledError, MT5ConnectionError
+from trading.execution.exceptions import BrokerExecutionDisabledError, MT5ConnectionError
 from trading.execution.validation import BrokerSymbolSpecification
 
 logger = logging.getLogger(__name__)
@@ -227,6 +228,8 @@ class MT5ReadOnlyClient:
                 res.get("tick"), symbol=sym, broker_utc_offset_hours=self._broker_utc_offset_hours
             )
 
+    get_symbol_tick = get_latest_tick
+
     def get_historical_bars(
         self, symbol: str, timeframe: MT5Timeframe, count: int = 5
     ) -> List[MT5BarData]:
@@ -280,6 +283,35 @@ class MT5ReadOnlyClient:
                 for r in raw_bars
             ]
 
+    def get_open_positions(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieve active open positions from MT5 (read-only query)."""
+        if not self._is_initialized:
+            raise MT5ConnectionError("MT5 client is not initialized.")
+
+        sym = symbol.strip().upper() if symbol else None
+        if self._mock_backend is not None:
+            fn = getattr(self._mock_backend, "positions_get", lambda **kw: [])
+            raw_pos = fn(symbol=sym) if sym else fn()
+            res = []
+            for p in raw_pos or []:
+                if hasattr(p, "_asdict"):
+                    res.append(p._asdict())
+                elif isinstance(p, dict):
+                    res.append(p)
+            return res
+
+        try:
+            import MetaTrader5 as mt5
+
+            raw_pos = mt5.positions_get(symbol=sym) if sym else mt5.positions_get()
+            if raw_pos is None:
+                return []
+            return [p._asdict() for p in raw_pos]
+        except ImportError:
+            query = f"positions_{sym}" if sym else "positions"
+            res = self._run_wine_diagnostic_query(query)
+            return res.get("positions", [])
+
     def _execute_wine_command(self, python_code: str) -> Dict[str, Any]:
         """Execute a Python snippet inside the Wine Python environment."""
         wine_prefix = self._wine_prefix
@@ -293,19 +325,24 @@ class MT5ReadOnlyClient:
         env["WINEPREFIX"] = wine_prefix
         env["WINEDEBUG"] = "-all"
         try:
-            proc = subprocess.run(
-                cmd,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=20,
-            )
-            return {
-                "status": "ok" if proc.returncode == 0 else "error",
-                "returncode": proc.returncode,
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-            }
+            with tempfile.TemporaryFile() as out_f, tempfile.TemporaryFile() as err_f:
+                proc = subprocess.run(
+                    cmd,
+                    env=env,
+                    stdout=out_f,
+                    stderr=err_f,
+                    timeout=30,
+                )
+                out_f.seek(0)
+                err_f.seek(0)
+                stdout = out_f.read().decode("utf-8", errors="replace")
+                stderr = err_f.read().decode("utf-8", errors="replace")
+                return {
+                    "status": "ok" if proc.returncode == 0 else "error",
+                    "returncode": proc.returncode,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                }
         except Exception as exc:
             return {"status": "error", "error": str(exc)}
 
@@ -360,6 +397,13 @@ elif q.startswith('bars_'):
                 for k in r.dtype.names
             })
     res['bars'] = bar_list
+elif q.startswith('positions'):
+    if '_' in q:
+        s_name = q.split('_', 1)[1]
+        raw_pos = mt5.positions_get(symbol=s_name)
+    else:
+        raw_pos = mt5.positions_get()
+    res['positions'] = [p._asdict() for p in (raw_pos or [])]
 
 mt5.shutdown()
 print(json.dumps(res))
