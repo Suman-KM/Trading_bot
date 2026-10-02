@@ -91,6 +91,23 @@ class MT5BrokerAdapter(BrokerAdapter):
         self._executions: List[ExecutionReport] = []
         self._seen_execution_ids: set[str] = set()
 
+        if self._repository:
+            try:
+                pos = self._repository.get_active_positions()
+                if isinstance(pos, dict):
+                    self._positions = pos
+                closed = self._repository.get_closed_positions()
+                if isinstance(closed, list):
+                    self._closed_positions = closed
+                orders = self._repository.get_all_orders()
+                if isinstance(orders, list):
+                    self._orders = {o.order_id: o for o in orders}
+                execs = self._repository.get_all_executions()
+                if isinstance(execs, list):
+                    self._executions = execs
+            except Exception:
+                pass
+
         self._symbol_specs = symbol_specs or {
             "EURUSD": BrokerSymbolSpecification(
                 symbol="EURUSD",
@@ -604,13 +621,26 @@ class MT5BrokerAdapter(BrokerAdapter):
             if acc:
                 broker_acc = {"balance": acc.balance, "equity": acc.equity}
 
+        unrealized = sum(p.unrealized_pnl for p in self._positions.values())
+        internal_equity = self._initial_balance + self._realized_pnl + unrealized
+        margin_used = sum(p.quantity * p.current_price for p in self._positions.values())
+        internal_acc = AccountInfo(
+            initial_balance=self._initial_balance,
+            cash_balance=round(self._cash_balance, 4),
+            margin_used=round(margin_used, 4),
+            realized_pnl=round(self._realized_pnl, 4),
+            unrealized_pnl=round(unrealized, 4),
+            equity=round(internal_equity, 4),
+            positions={k: p.model_copy() for k, p in self._positions.items()},
+        )
+
         spec = self.get_symbol_info("EURUSD")
         contract_size = spec.contract_size if spec else 100_000.0
 
         return reconcile_positions(
             internal_positions=self._positions,
             broker_positions=broker_positions,
-            internal_account=self.get_account(),
+            internal_account=internal_acc,
             broker_account=broker_acc,
             contract_size=contract_size,
             audit_trail=self._audit_trail,

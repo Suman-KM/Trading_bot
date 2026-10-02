@@ -148,10 +148,13 @@ def reconcile_positions(
     b_bal = float(broker_account.get("balance", 0.0)) if broker_account else int_bal
     b_eq = float(broker_account.get("equity", 0.0)) if broker_account else int_eq
 
-    # Balance discrepancy check (allow reasonable tolerance for broker swap/floating costs)
+    # Balance and Equity discrepancy check
+    # (allow reasonable tolerance for broker swap/floating costs)
     if broker_account and internal_account:
         if abs(int_bal - b_bal) > 500.0:  # Material divergence check
             discrepancies.append(f"Balance divergence: internal={int_bal}, broker={b_bal}")
+        if abs(int_eq - b_eq) > 500.0:  # Material divergence check
+            discrepancies.append(f"Equity divergence: internal={int_eq}, broker={b_eq}")
 
     healthy = len(discrepancies) == 0
     status = ReconciliationStatus.HEALTHY if healthy else ReconciliationStatus.MISMATCH_DETECTED

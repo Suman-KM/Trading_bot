@@ -268,6 +268,23 @@ def get_readiness(
                 except Exception:
                     reconciliation_ok = False
 
+        data_fresh = True
+        if mt5_adp is not None:
+            ro_client = getattr(mt5_adp, "readonly_client", None)
+            if ro_client and ro_client.is_connected:
+                try:
+                    tick = ro_client.get_latest_tick("EURUSD")
+                    if tick and tick.timestamp_utc:
+                        now_utc = datetime.now(timezone.utc)
+                        staleness = (now_utc - tick.timestamp_utc).total_seconds()
+                        if staleness > 120.0:
+                            data_fresh = False
+                except Exception:
+                    pass
+
+        forward_active = bool(getattr(context, "forward_validation_active", False))
+        risk_engine_ready = (risk_engine is not None) and daily_loss_ok
+
         is_ready = (
             broker is not None
             and risk_engine is not None
@@ -280,6 +297,9 @@ def get_readiness(
             and quarantine_enforced
             and exec_service_ready
             and daily_loss_ok
+            and not mt5_live_detected
+            and reconciliation_ok
+            and (data_fresh if forward_active else True)
         )
     except Exception as exc:
         return JSONResponse(
@@ -297,6 +317,9 @@ def get_readiness(
                 audit_integrity_valid=False,
                 quarantine_enforced=False,
                 execution_service_ready=False,
+                risk_engine_ready=False,
+                data_fresh=False,
+                forward_validation_active=False,
                 recovery_error=str(exc),
                 environment="DEMO",
                 trading_backend="PAPER",
@@ -331,6 +354,9 @@ def get_readiness(
         mt5_trade_permissions_verified=mt5_trade_perm,
         mt5_symbol_verified=mt5_symbol_ver,
         reconciliation_healthy=reconciliation_ok,
+        risk_engine_ready=risk_engine_ready,
+        data_fresh=data_fresh,
+        forward_validation_active=forward_active,
         recovery_error=context.recovery_error,
         environment="DEMO",
         trading_backend="PAPER",

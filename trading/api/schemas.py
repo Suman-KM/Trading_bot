@@ -113,6 +113,9 @@ class ReadinessResponse(BaseModel):
     mt5_trade_permissions_verified: bool = False
     mt5_symbol_verified: bool = False
     reconciliation_healthy: bool = True
+    risk_engine_ready: bool = True
+    data_fresh: bool = True
+    forward_validation_active: bool = False
     recovery_error: Optional[str] = None
     environment: str = "DEMO"
     trading_backend: str = "PAPER"

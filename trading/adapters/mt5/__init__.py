@@ -1,6 +1,14 @@
 """MetaTrader 5 adapter package with demo execution and safety transports."""
 
 from trading.adapters.mt5.client import MT5_TIMEFRAME_MAP, MT5ReadOnlyClient
+from trading.adapters.mt5.forward import (
+    ForwardDemoRunner,
+    ForwardExecutionRecord,
+    ForwardOperationalMetrics,
+    ForwardPreflightReport,
+    ForwardSignalRecord,
+    ForwardValidationConfig,
+)
 from trading.adapters.mt5.normalizer import (
     MT5DataNormalizationError,
     mask_login,
@@ -60,6 +68,12 @@ __all__ = [
     "DemoAccountVerifier",
     "DemoExecutionNotAuthorizedError",
     "DemoVerificationReport",
+    "ForwardDemoRunner",
+    "ForwardExecutionRecord",
+    "ForwardOperationalMetrics",
+    "ForwardPreflightReport",
+    "ForwardSignalRecord",
+    "ForwardValidationConfig",
     "LiveAccountForbiddenError",
     "MT5AccountMetadata",
     "MT5BarData",
