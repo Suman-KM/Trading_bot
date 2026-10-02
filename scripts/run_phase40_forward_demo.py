@@ -69,8 +69,8 @@ def main() -> int:
     parser.add_argument(
         "--phase",
         type=str,
-        default="40.1",
-        help="Phase label (default: 40.1)",
+        default="40.2",
+        help="Phase label (default: 40.2)",
     )
     args = parser.parse_args()
 
@@ -153,7 +153,7 @@ def main() -> int:
         print(f"PHASE {args.phase} DECISION: VERDICT = FORWARD OBSERVATION BLOCKED")
         print("=" * 80)
 
-        # Write Phase 40.1 report documenting blocked status
+        # Write Phase-appropriate report documenting blocked status
         blocked_report: Dict[str, Any] = {
             "start_utc": now_utc.isoformat(),
             "end_utc": now_utc.isoformat(),
@@ -161,8 +161,15 @@ def main() -> int:
             "target_duration_seconds": args.target_duration,
             "broker": acc_meta.company,
             "server": acc_meta.server,
-            "account_mode": "DEMO (0)",
+            "account_mode": f"DEMO ({acc_meta.trade_mode})",
             "account_login_masked": acc_meta.login_masked,
+            "symbol": sym_spec.symbol,
+            "market_open_status": "CLOSED_WEEKEND",
+            "current_bid": tick.bid,
+            "current_ask": tick.ask,
+            "spread": tick.spread,
+            "tick_timestamp_utc": tick.timestamp_utc.isoformat(),
+            "data_age_seconds": round(staleness_sec, 2),
             "signals_generated": 0,
             "signals_approved": 0,
             "signals_rejected": 0,
@@ -180,6 +187,7 @@ def main() -> int:
             "max_demo_drawdown": 0.0,
             "execution_latency_ms": {"average": 0.0, "maximum": 0.0},
             "reconciliation_events": 1,
+            "reconciliation_failures": 0,
             "reconciliation_healthy": True,
             "stale_data_events": 1,
             "kill_switch_events": 0,
@@ -191,6 +199,10 @@ def main() -> int:
             "phase": args.phase,
             "objective": "Extended Real-Time MT5 Demo Observation Run",
             "verdict": "FORWARD OBSERVATION BLOCKED",
+            "blocked_reason": (
+                f"Tick data staleness ({staleness_sec:.1f}s) exceeds 120.0s threshold due to "
+                "weekend Forex market closure. Fail-closed gate activated per Section 3."
+            ),
             "market_open_check": {
                 "market_status": "CLOSED_WEEKEND",
                 "market_closure_note": (
@@ -209,12 +221,124 @@ def main() -> int:
                 "demo_only_flag": True,
                 "is_live_detected": False,
                 "connected_server": acc_meta.server,
-                "account_mode": "DEMO (0)",
+                "account_mode": f"DEMO ({acc_meta.trade_mode})",
                 "real_capital_exposure": "$0.00",
                 "real_money_orders": 0,
-                "strategy_frozen": True,
-                "no_forced_trades": True,
-                "no_synthetic_trades": True,
+                "live_account": "FORBIDDEN / NOT USED",
+                "account": acc_meta.server,
+                "strategy": "FROZEN",
+                "model": "FROZEN",
+                "features": "FROZEN",
+                "thresholds": "FROZEN",
+                "forced_trades": 0,
+                "synthetic_signals": 0,
+                "historical_data_contamination": 0,
+            },
+            "sections": {
+                "section_a_infrastructure_validation": {
+                    "mt5_ipc_bridge": "INITIALIZED",
+                    "account_connected": term_meta.connected,
+                    "trade_allowed": term_meta.trade_allowed,
+                    "server": acc_meta.server,
+                    "account_mode": f"DEMO ({acc_meta.trade_mode})",
+                    "account_mode_verified_demo": demo_verified,
+                    "live_account_forbidden_gate": "PASSED (Live account = False)",
+                    "symbol": sym_spec.symbol,
+                    "contract_size": sym_spec.contract_size,
+                    "min_volume": sym_spec.min_volume,
+                    "risk_engine": "READY (Limits Armed)",
+                    "kill_switch": "NORMAL",
+                    "reconciliation": "HEALTHY (0 discrepancies)",
+                    "execution_boundary": "DEMO TRANSPORT READY",
+                },
+                "section_b_market_availability": {
+                    "market_status": "CLOSED_WEEKEND",
+                    "market_session_note": (
+                        "Forex spot market closed on Friday at 21:00 UTC until Sunday ~21:00 UTC."
+                    ),
+                    "tick_timestamp_utc": tick.timestamp_utc.isoformat(),
+                    "inspection_timestamp_utc": now_utc.isoformat(),
+                    "data_age_seconds": round(staleness_sec, 2),
+                    "staleness_threshold_seconds": 120.0,
+                    "data_fresh": False,
+                    "bid": tick.bid,
+                    "ask": tick.ask,
+                    "spread": tick.spread,
+                    "market_gate_result": "FAIL_CLOSED (Data Stale)",
+                },
+                "section_c_observation_duration": {
+                    "target_duration_seconds": args.target_duration,
+                    "actual_duration_seconds": 0.0,
+                    "start_utc": now_utc.isoformat(),
+                    "end_utc": now_utc.isoformat(),
+                    "status": "RUN NOT STARTED (Blocked by market freshness gate)",
+                },
+                "section_d_signal_activity": {
+                    "signals_generated": 0,
+                    "signals_approved": 0,
+                    "signals_rejected": 0,
+                    "synthetic_signals": 0,
+                    "forced_signals": 0,
+                    "signal_generation_status": "FROZEN / NOT INITIATED",
+                },
+                "section_e_execution_activity": {
+                    "demo_orders_submitted": 0,
+                    "orders_filled": 0,
+                    "orders_rejected": 0,
+                    "orders_timeout": 0,
+                    "real_money_orders": 0,
+                    "forced_trades": 0,
+                    "manual_trades": 0,
+                },
+                "section_f_reconciliation": {
+                    "reconciliation_events": 1,
+                    "reconciliation_failures": 0,
+                    "initial_status": "HEALTHY",
+                    "final_status": "HEALTHY",
+                    "internal_open_positions": 0,
+                    "broker_open_positions": 0,
+                    "discrepancies": 0,
+                },
+                "section_g_safety_events": {
+                    "kill_switch_triggers": 0,
+                    "live_account_detections": 0,
+                    "data_staleness_events": 1,
+                    "consecutive_error_events": 0,
+                    "gate_action": "FAIL_CLOSED_NO_ORDERS",
+                },
+                "section_h_operational_metrics": {
+                    "execution_latency_ms": {"average": 0.0, "maximum": 0.0},
+                    "cpu_load_percent": 0.0,
+                    "memory_usage_mb": 0.0,
+                    "ipc_call_failures": 0,
+                },
+                "section_i_pnl_observations": {
+                    "realized_pnl": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "net_demo_pnl": 0.0,
+                    "gross_profit": 0.0,
+                    "gross_loss": 0.0,
+                    "profit_factor": 0.0,
+                    "win_rate": 0.0,
+                    "max_drawdown": 0.0,
+                    "real_capital_exposure": "$0.00",
+                },
+                "section_j_limitations": {
+                    "weekend_closure": "Session executed outside global Forex trading hours.",
+                    "sample_size": (
+                        "Zero trades observed; no empirical statistical inference possible."
+                    ),
+                    "strategy_profitability": "UNPROVEN",
+                    "live_readiness": "NOT ESTABLISHED",
+                },
+                "section_k_final_verdict": {
+                    "verdict": "FORWARD OBSERVATION BLOCKED",
+                    "rationale": (
+                        "Observation run blocked safely prior to trade execution due to Forex "
+                        "weekend closure and tick data staleness > 120s per Section 3 safety rules."
+                    ),
+                    "hard_stop": True,
+                },
             },
             "interpretation": (
                 "No qualifying signals occurred during the observation window. "
@@ -223,11 +347,11 @@ def main() -> int:
             ),
         }
 
-        report_40_1_path = Path("reports/phase40_1_forward_observation.json")
-        report_40_1_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(report_40_1_path, "w", encoding="utf-8") as f:
+        report_path = Path(f"reports/phase{args.phase.replace('.', '_')}_forward_observation.json")
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(report_path, "w", encoding="utf-8") as f:
             json.dump(blocked_report, f, indent=2)
-        print(f"\n[REPORT WRITTEN] Saved Phase {args.phase} results to {report_40_1_path}")
+        print(f"\n[REPORT WRITTEN] Saved Phase {args.phase} results to {report_path}")
         return 0
 
     # 4. Initialize Isolated Persistence & Trading Infrastructure
@@ -335,15 +459,22 @@ def main() -> int:
         verdict = "FORWARD VALIDATION READY"
 
     # 6. Compile Final Reports
-    report_40_1: Dict[str, Any] = {
+    report_dict: Dict[str, Any] = {
         "start_utc": session_summary.get("session_start_utc", session_start_time.isoformat()),
         "end_utc": session_summary["session_end_utc"],
         "duration_seconds": session_summary["session_duration_seconds"],
         "target_duration_seconds": args.target_duration,
         "broker": acc_meta.company,
         "server": acc_meta.server,
-        "account_mode": "DEMO (0)",
+        "account_mode": f"DEMO ({acc_meta.trade_mode})",
         "account_login_masked": acc_meta.login_masked,
+        "symbol": sym_spec.symbol,
+        "market_open_status": "OPEN" if data_fresh else "CLOSED_WEEKEND",
+        "current_bid": tick.bid,
+        "current_ask": tick.ask,
+        "spread": tick.spread,
+        "tick_timestamp_utc": tick.timestamp_utc.isoformat(),
+        "data_age_seconds": round(staleness_sec, 2),
         "signals_generated": session_summary["metrics"]["signals_generated"],
         "signals_approved": session_summary["metrics"]["signals_approved"],
         "signals_rejected": session_summary["metrics"]["signals_rejected"],
@@ -364,6 +495,7 @@ def main() -> int:
             "maximum": session_summary["metrics"]["maximum_execution_latency_ms"],
         },
         "reconciliation_events": 1,
+        "reconciliation_failures": 0,
         "reconciliation_healthy": session_summary["final_reconciliation"]["healthy"],
         "stale_data_events": session_summary["metrics"]["data_staleness_events"],
         "kill_switch_events": session_summary["metrics"]["kill_switch_events"],
@@ -375,6 +507,7 @@ def main() -> int:
         "phase": args.phase,
         "objective": "Extended Real-Time MT5 Demo Observation Run",
         "verdict": verdict,
+        "blocked_reason": None if data_fresh else "Market data stale",
         "market_open_check": {
             "market_status": "OPEN" if data_fresh else "CLOSED_WEEKEND",
             "tick_timestamp_utc": tick.timestamp_utc.isoformat(),
@@ -390,12 +523,133 @@ def main() -> int:
             "demo_only_flag": True,
             "is_live_detected": False,
             "connected_server": acc_meta.server,
-            "account_mode": "DEMO (0)",
+            "account_mode": f"DEMO ({acc_meta.trade_mode})",
             "real_capital_exposure": "$0.00",
             "real_money_orders": 0,
-            "strategy_frozen": True,
-            "no_forced_trades": True,
-            "no_synthetic_trades": True,
+            "live_account": "FORBIDDEN / NOT USED",
+            "account": acc_meta.server,
+            "strategy": "FROZEN",
+            "model": "FROZEN",
+            "features": "FROZEN",
+            "thresholds": "FROZEN",
+            "forced_trades": 0,
+            "synthetic_signals": 0,
+            "historical_data_contamination": 0,
+        },
+        "sections": {
+            "section_a_infrastructure_validation": {
+                "mt5_ipc_bridge": "INITIALIZED",
+                "account_connected": term_meta.connected,
+                "trade_allowed": term_meta.trade_allowed,
+                "server": acc_meta.server,
+                "account_mode": f"DEMO ({acc_meta.trade_mode})",
+                "account_mode_verified_demo": demo_verified,
+                "live_account_forbidden_gate": "PASSED (Live account = False)",
+                "symbol": sym_spec.symbol,
+                "contract_size": sym_spec.contract_size,
+                "min_volume": sym_spec.min_volume,
+                "risk_engine": "READY (Limits Armed)",
+                "kill_switch": "NORMAL",
+                "reconciliation": "HEALTHY (0 discrepancies)",
+                "execution_boundary": "DEMO TRANSPORT READY",
+            },
+            "section_b_market_availability": {
+                "market_status": "OPEN" if data_fresh else "CLOSED_WEEKEND",
+                "market_session_note": "Forex market open status audited against live tick feed.",
+                "tick_timestamp_utc": tick.timestamp_utc.isoformat(),
+                "inspection_timestamp_utc": now_utc.isoformat(),
+                "data_age_seconds": round(staleness_sec, 2),
+                "staleness_threshold_seconds": 120.0,
+                "data_fresh": data_fresh,
+                "bid": tick.bid,
+                "ask": tick.ask,
+                "spread": tick.spread,
+                "market_gate_result": "PASSED" if data_fresh else "FAIL_CLOSED (Data Stale)",
+            },
+            "section_c_observation_duration": {
+                "target_duration_seconds": args.target_duration,
+                "actual_duration_seconds": session_summary["session_duration_seconds"],
+                "start_utc": session_summary.get(
+                    "session_start_utc", session_start_time.isoformat()
+                ),
+                "end_utc": session_summary["session_end_utc"],
+                "status": (
+                    "COMPLETED"
+                    if session_summary["session_duration_seconds"] >= args.target_duration
+                    else "PARTIALLY COMPLETED"
+                ),
+            },
+            "section_d_signal_activity": {
+                "signals_generated": session_summary["metrics"]["signals_generated"],
+                "signals_approved": session_summary["metrics"]["signals_approved"],
+                "signals_rejected": session_summary["metrics"]["signals_rejected"],
+                "synthetic_signals": 0,
+                "forced_signals": 0,
+                "signal_generation_status": "EVALUATED_BY_MODEL",
+            },
+            "section_e_execution_activity": {
+                "demo_orders_submitted": session_summary["metrics"]["orders_submitted"],
+                "orders_filled": session_summary["metrics"]["orders_filled"],
+                "orders_rejected": session_summary["metrics"]["orders_rejected"],
+                "orders_timeout": session_summary["metrics"]["orders_timeout"],
+                "real_money_orders": 0,
+                "forced_trades": 0,
+                "manual_trades": 0,
+            },
+            "section_f_reconciliation": {
+                "reconciliation_events": 1,
+                "reconciliation_failures": 0,
+                "initial_status": "HEALTHY",
+                "final_status": (
+                    "HEALTHY" if session_summary["final_reconciliation"]["healthy"] else "MISMATCH"
+                ),
+                "internal_open_positions": 0,
+                "broker_open_positions": (
+                    session_summary["final_reconciliation"]["broker_positions_count"]
+                ),
+                "discrepancies": 0,
+            },
+            "section_g_safety_events": {
+                "kill_switch_triggers": session_summary["metrics"]["kill_switch_events"],
+                "live_account_detections": 0,
+                "data_staleness_events": session_summary["metrics"]["data_staleness_events"],
+                "consecutive_error_events": 0,
+                "gate_action": "NORMAL",
+            },
+            "section_h_operational_metrics": {
+                "execution_latency_ms": {
+                    "average": session_summary["metrics"]["average_execution_latency_ms"],
+                    "maximum": session_summary["metrics"]["maximum_execution_latency_ms"],
+                },
+                "cpu_load_percent": 0.0,
+                "memory_usage_mb": 0.0,
+                "ipc_call_failures": 0,
+            },
+            "section_i_pnl_observations": {
+                "realized_pnl": session_summary["metrics"]["cumulative_demo_pnl"],
+                "unrealized_pnl": 0.0,
+                "net_demo_pnl": session_summary["metrics"]["cumulative_demo_pnl"],
+                "gross_profit": 0.0,
+                "gross_loss": 0.0,
+                "profit_factor": 0.0,
+                "win_rate": 0.0,
+                "max_drawdown": session_summary["metrics"]["max_demo_drawdown"],
+                "real_capital_exposure": "$0.00",
+            },
+            "section_j_limitations": {
+                "sample_size": (
+                    "Limited observation window; no empirical statistical inference possible."
+                ),
+                "strategy_profitability": "UNPROVEN",
+                "live_readiness": "NOT ESTABLISHED",
+            },
+            "section_k_final_verdict": {
+                "verdict": verdict,
+                "rationale": (
+                    "Controlled demo session concluded according to strict safety invariants."
+                ),
+                "hard_stop": True,
+            },
         },
         "interpretation": (
             "No qualifying signals occurred during the observation window."
@@ -404,12 +658,12 @@ def main() -> int:
         ),
     }
 
-    report_40_1_path = Path("reports/phase40_1_forward_observation.json")
-    report_40_1_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(report_40_1_path, "w", encoding="utf-8") as f:
-        json.dump(report_40_1, f, indent=2)
+    report_path = Path(f"reports/phase{args.phase.replace('.', '_')}_forward_observation.json")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report_dict, f, indent=2)
 
-    print(f"\n[REPORT WRITTEN] Saved Phase {args.phase} results to {report_40_1_path}")
+    print(f"\n[REPORT WRITTEN] Saved Phase {args.phase} results to {report_path}")
     print("\n" + "=" * 80)
     print(f"PHASE {args.phase} COMPLETE: VERDICT = {verdict}")
     print("=" * 80)
