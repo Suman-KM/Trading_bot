@@ -104,6 +104,8 @@ class ReadinessResponse(BaseModel):
     audit_integrity_valid: bool = True
     quarantine_enforced: bool = True
     execution_service_ready: bool = True
+    mt5_adapter_available: bool = False
+    mt5_execution_enabled: bool = False
     recovery_error: Optional[str] = None
     environment: str = "DEMO"
     trading_backend: str = "PAPER"

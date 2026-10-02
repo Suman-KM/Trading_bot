@@ -1,7 +1,9 @@
 """Broker adapter boundary interface and Paper Broker adapter implementation."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from trading.models.execution import ExecutionReport
 from trading.models.order import Order
@@ -9,6 +11,7 @@ from trading.models.portfolio import AccountInfo
 from trading.models.position import Position
 
 if TYPE_CHECKING:
+    from trading.execution.capabilities import BrokerCapabilities
     from trading.execution.paper_broker import PaperBroker
 
 
@@ -71,6 +74,22 @@ class BrokerAdapter(ABC):
         """Declare whether adapter connects to real/live capital. Always False for paper."""
         pass
 
+    @property
+    @abstractmethod
+    def capabilities(self) -> "BrokerCapabilities":
+        """Declare broker capabilities."""
+        pass
+
+    @property
+    @abstractmethod
+    def execution_enabled(self) -> bool:
+        """Declare whether adapter allows active order submission."""
+        pass
+
+    def get_symbol_info(self, symbol: str) -> Optional[Any]:
+        """Fetch broker symbol specifications if supported."""
+        return None
+
 
 class PaperBrokerAdapter(BrokerAdapter):
     """Concrete broker adapter wrapping the in-memory PaperBroker.
@@ -84,6 +103,21 @@ class PaperBrokerAdapter(BrokerAdapter):
     @property
     def is_live(self) -> bool:
         return False
+
+    @property
+    def execution_enabled(self) -> bool:
+        return True
+
+    @property
+    def capabilities(self) -> "BrokerCapabilities":
+        from trading.execution.capabilities import DEFAULT_PAPER_CAPABILITIES
+
+        return DEFAULT_PAPER_CAPABILITIES
+
+    def get_symbol_info(self, symbol: str) -> Optional[Any]:
+        from trading.execution.validation import BrokerSymbolSpecification
+
+        return BrokerSymbolSpecification(symbol=symbol.strip().upper())
 
     def get_account(self) -> AccountInfo:
         return self._broker.get_account()

@@ -282,6 +282,8 @@ def get_readiness(
         audit_integrity_valid=audit_integrity,
         quarantine_enforced=quarantine_enforced,
         execution_service_ready=exec_service_ready,
+        mt5_adapter_available=False,
+        mt5_execution_enabled=False,
         recovery_error=context.recovery_error,
         environment="DEMO",
         trading_backend="PAPER",
