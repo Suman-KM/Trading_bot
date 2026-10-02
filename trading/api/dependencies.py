@@ -5,6 +5,9 @@ from typing import Optional
 from trading.audit.trail import AuditTrail
 from trading.execution.paper_broker import PaperBroker
 from trading.execution.service import TradingExecutionService
+from trading.persistence.database import PaperDatabaseManager
+from trading.persistence.migrations import PaperSchemaMigrator
+from trading.persistence.repository import PaperTradingRepository
 from trading.portfolio.manager import PortfolioManager
 from trading.risk.engine import RiskEngine
 from trading.risk.kill_switch import KillSwitch
@@ -12,7 +15,7 @@ from trading.risk.limits import RiskLimits
 
 
 class TradingContext:
-    """Encapsulates the runtime state of the trading safety core."""
+    """Encapsulates the runtime state and persistence layers of the paper trading platform."""
 
     def __init__(
         self,
@@ -20,22 +23,55 @@ class TradingContext:
         limits: Optional[RiskLimits] = None,
         kill_switch: Optional[KillSwitch] = None,
         audit_trail: Optional[AuditTrail] = None,
+        database_manager: Optional[PaperDatabaseManager] = None,
+        repository: Optional[PaperTradingRepository] = None,
     ) -> None:
-        self.audit_trail: AuditTrail = audit_trail or AuditTrail()
+        self.database_manager: PaperDatabaseManager = database_manager or PaperDatabaseManager()
+        try:
+            PaperSchemaMigrator.apply_migrations(self.database_manager)
+            self.repository: Optional[PaperTradingRepository] = (
+                repository or PaperTradingRepository(self.database_manager)
+            )
+            self.persistence_healthy: bool = True
+            self.recovery_error: Optional[str] = None
+        except Exception as exc:
+            self.repository = None
+            self.persistence_healthy = False
+            self.recovery_error = f"PERSISTENCE_INIT_ERROR: {str(exc)}"
+
+        self.audit_trail: AuditTrail = audit_trail or AuditTrail(repository=self.repository)
         self.limits: RiskLimits = limits or RiskLimits()
-        self.kill_switch: KillSwitch = kill_switch or KillSwitch(audit_trail=self.audit_trail)
-        self.kill_switch.set_audit_trail(self.audit_trail)
-        self.risk_engine: RiskEngine = RiskEngine(limits=self.limits, kill_switch=self.kill_switch)
-        self.paper_broker: PaperBroker = PaperBroker(
-            initial_balance=initial_balance,
-            audit_trail=self.audit_trail,
+        self.kill_switch: KillSwitch = kill_switch or KillSwitch(
+            audit_trail=self.audit_trail, repository=self.repository
         )
-        self.portfolio_manager: PortfolioManager = PortfolioManager(broker=self.paper_broker)
+        self.kill_switch.set_audit_trail(self.audit_trail)
+        if self.repository:
+            self.kill_switch.set_repository(self.repository)
+
+        self.risk_engine: RiskEngine = RiskEngine(limits=self.limits, kill_switch=self.kill_switch)
+        try:
+            self.paper_broker: PaperBroker = PaperBroker(
+                initial_balance=initial_balance,
+                audit_trail=self.audit_trail,
+                repository=self.repository,
+            )
+        except Exception as exc:
+            self.persistence_healthy = False
+            self.recovery_error = f"BROKER_RECOVERY_ERROR: {str(exc)}"
+            self.paper_broker = PaperBroker(
+                initial_balance=initial_balance,
+                audit_trail=self.audit_trail,
+            )
+
+        self.portfolio_manager: PortfolioManager = PortfolioManager(
+            broker=self.paper_broker, repository=self.repository
+        )
         self.execution_service: TradingExecutionService = TradingExecutionService(
             risk_engine=self.risk_engine,
             paper_broker=self.paper_broker,
             portfolio_manager=self.portfolio_manager,
             audit_trail=self.audit_trail,
+            repository=self.repository,
         )
 
 
@@ -57,10 +93,14 @@ def set_trading_context(context: TradingContext) -> None:
     _default_context = context
 
 
-def reset_trading_context(initial_balance: float = 100_000.0) -> TradingContext:
-    """Reset the default trading context to a fresh state."""
+def reset_trading_context(
+    initial_balance: float = 100_000.0,
+    use_memory_db: bool = True,
+) -> TradingContext:
+    """Reset the default trading context to a fresh state (in-memory db by default for tests)."""
     global _default_context
-    _default_context = TradingContext(initial_balance=initial_balance)
+    db = PaperDatabaseManager(":memory:") if use_memory_db else PaperDatabaseManager()
+    _default_context = TradingContext(initial_balance=initial_balance, database_manager=db)
     return _default_context
 
 
@@ -92,3 +132,13 @@ def get_kill_switch() -> KillSwitch:
 def get_audit_trail() -> AuditTrail:
     """Dependency provider for AuditTrail."""
     return get_trading_context().audit_trail
+
+
+def get_repository() -> Optional[PaperTradingRepository]:
+    """Dependency provider for PaperTradingRepository."""
+    return get_trading_context().repository
+
+
+def get_database_manager() -> Optional[PaperDatabaseManager]:
+    """Dependency provider for PaperDatabaseManager."""
+    return get_trading_context().database_manager

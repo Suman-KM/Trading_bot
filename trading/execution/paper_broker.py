@@ -1,8 +1,10 @@
 """Deterministic, in-memory Paper Broker Simulator for risk and execution testing."""
 
+from __future__ import annotations
+
 import math
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from trading.audit.trail import AuditEventType, AuditTrail
 from trading.execution.costs import CostBreakdown, TransactionCostConfig
@@ -11,9 +13,18 @@ from trading.models.order import Order, OrderSide, OrderStatus, OrderType
 from trading.models.portfolio import AccountInfo
 from trading.models.position import Position
 
+if TYPE_CHECKING:
+    pass
+
+
+class InconsistentStateError(ValueError):
+    """Raised when persisted paper-trading state violates internal consistency."""
+
+    pass
+
 
 class PaperBroker:
-    """Deterministic, 100% in-memory broker simulator with zero external connectivity.
+    """Deterministic, persistent-capable broker simulator with zero external connectivity.
 
     Guarantees:
     - Pure in-memory state with zero network connectivity.
@@ -21,6 +32,7 @@ class PaperBroker:
     - Structured execution reports and audit trails.
     - Deterministic order state transitions.
     - Continuous position lifecycle and MTM valuation.
+    - Crash/restart recovery from persistent storage with consistency validation.
     """
 
     def __init__(
@@ -28,6 +40,7 @@ class PaperBroker:
         initial_balance: float = 100_000.0,
         cost_config: Optional[TransactionCostConfig] = None,
         audit_trail: Optional[AuditTrail] = None,
+        repository: Optional[Any] = None,
     ) -> None:
         if not math.isfinite(initial_balance) or initial_balance <= 0:
             raise ValueError(
@@ -44,6 +57,9 @@ class PaperBroker:
         self._execution_reports: List[ExecutionReport] = []
         self._cost_config = cost_config or TransactionCostConfig()
         self._audit_trail = audit_trail
+        self._repository = repository
+        if self._repository:
+            self.recover_from_repository()
 
     @property
     def cost_config(self) -> TransactionCostConfig:
@@ -56,13 +72,80 @@ class PaperBroker:
     def set_audit_trail(self, audit_trail: AuditTrail) -> None:
         self._audit_trail = audit_trail
 
+    @property
+    def repository(self) -> Optional[Any]:
+        return self._repository
+
+    def set_repository(self, repository: Any) -> None:
+        self._repository = repository
+        if self._repository:
+            self.recover_from_repository()
+
+    def recover_from_repository(self) -> None:
+        """Reconstruct in-memory state from persistent repository and validate consistency."""
+        if not self._repository:
+            return
+
+        # 1. Load orders
+        orders = self._repository.get_all_orders()
+        self._orders = {o.order_id: o for o in orders}
+
+        # 2. Load execution reports
+        self._execution_reports = self._repository.get_all_executions()
+
+        # 3. Load active positions
+        self._positions = self._repository.get_active_positions()
+
+        # 4. Load closed positions
+        self._closed_positions = self._repository.get_closed_positions()
+
+        # 5. Load latest account snapshot
+        snapshot = self._repository.get_latest_account_snapshot()
+        if snapshot:
+            self._initial_balance = float(snapshot["initial_balance"])
+            self._cash_balance = float(snapshot["cash_balance"])
+            self._realized_pnl = float(snapshot["realized_pnl"])
+            self._total_costs = float(snapshot["total_costs"])
+            self._gross_pnl = round(self._realized_pnl + self._total_costs, 4)
+        else:
+            self._total_costs = sum(p.costs for p in self._closed_positions)
+            self._realized_pnl = sum(p.realized_pnl for p in self._closed_positions)
+            self._gross_pnl = sum(p.gross_pnl for p in self._closed_positions)
+
+        # 6. Validate consistency
+        unrealized = sum(p.unrealized_pnl for p in self._positions.values())
+        reconstructed_equity = round(self._initial_balance + self._realized_pnl + unrealized, 4)
+
+        if snapshot:
+            persisted_equity = round(float(snapshot["equity"]), 4)
+            if abs(reconstructed_equity - persisted_equity) > 0.05:
+                raise InconsistentStateError(
+                    f"INCONSISTENT_STATE: Reconstructed equity ({reconstructed_equity:.2f}) "
+                    f"does not match persisted equity ({persisted_equity:.2f})"
+                )
+
+    def _sync_snapshot(self) -> None:
+        """Helper to persist account snapshot after state mutations."""
+        if not self._repository:
+            return
+        account = self.get_account()
+        exposure = sum(p.quantity * p.current_price for p in self._positions.values())
+        self._repository.save_account_snapshot(
+            account=account,
+            total_costs=self._total_costs,
+            daily_pnl=self._realized_pnl,
+            current_exposure=exposure,
+        )
+
     def get_account(self) -> AccountInfo:
         """Return current snapshot of simulated account equity, cash, and positions."""
         unrealized = sum(p.unrealized_pnl for p in self._positions.values())
         equity = self._initial_balance + self._realized_pnl + unrealized
+        margin_used = sum(p.quantity * p.current_price for p in self._positions.values())
         return AccountInfo(
             initial_balance=self._initial_balance,
             cash_balance=round(self._cash_balance, 4),
+            margin_used=round(margin_used, 4),
             realized_pnl=round(self._realized_pnl, 4),
             unrealized_pnl=round(unrealized, 4),
             equity=round(equity, 4),
@@ -107,6 +190,13 @@ class PaperBroker:
 
         pos = self._positions[cleaned]
         pos.update_price(price)
+        if self._repository:
+            self._repository.save_position(pos)
+            self._repository.save_account_snapshot(
+                account=self.get_account(),
+                total_costs=self._total_costs,
+                daily_pnl=self._realized_pnl,
+            )
 
         if self._audit_trail:
             self._audit_trail.record(
@@ -132,6 +222,8 @@ class PaperBroker:
             raise KeyError(f"Order {order_id} not found")
         order = self._orders[order_id]
         order.transition_to(OrderStatus.CANCELLED)
+        if self._repository:
+            self._repository.save_order(order)
 
         if self._audit_trail:
             self._audit_trail.record(
@@ -414,12 +506,22 @@ class PaperBroker:
             spread=costs.spread_cost,
             slippage=costs.slippage_cost,
             commission=costs.commission,
+            swap=costs.swap_cost if hasattr(costs, "swap_cost") else 0.0,
             gross_pnl=gross_pnl,
             net_pnl=net_pnl,
             execution_status=order.status,
             rejection_reason=rejection_reason or order.rejection_reason,
         )
         self._execution_reports.append(report)
+
+        if self._repository:
+            self._repository.save_order(order)
+            self._repository.save_execution(report)
+            if order.symbol in self._positions:
+                self._repository.save_position(self._positions[order.symbol])
+            elif self._closed_positions and self._closed_positions[-1].symbol == order.symbol:
+                self._repository.save_position(self._closed_positions[-1])
+            self._sync_snapshot()
 
         if self._audit_trail:
             event_type = (

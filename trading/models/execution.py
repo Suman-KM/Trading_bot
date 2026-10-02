@@ -27,6 +27,7 @@ class ExecutionReport(BaseModel):
     spread: float = 0.0
     slippage: float = 0.0
     commission: float = 0.0
+    swap: float = 0.0
     gross_pnl: float = 0.0
     net_pnl: float = 0.0
     execution_status: OrderStatus

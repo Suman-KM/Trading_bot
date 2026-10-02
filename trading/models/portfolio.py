@@ -14,6 +14,7 @@ class AccountInfo(BaseModel):
 
     initial_balance: float
     cash_balance: float
+    margin_used: float = 0.0
     realized_pnl: float = 0.0
     unrealized_pnl: float = 0.0
     equity: float

@@ -1,12 +1,18 @@
-"""Position data model for active paper portfolio holdings."""
-
 import math
+import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from enum import Enum
+from typing import Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from trading.models.order import OrderSide
+
+
+class PositionStatus(str, Enum):
+    OPEN = "OPEN"
+    ACTIVE = "ACTIVE"
+    CLOSED = "CLOSED"
 
 
 class Position(BaseModel):
@@ -14,6 +20,7 @@ class Position(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    position_id: str = Field(default_factory=lambda: f"pos-{uuid.uuid4().hex[:12]}")
     symbol: str
     side: OrderSide
     quantity: float
@@ -29,7 +36,7 @@ class Position(BaseModel):
     gross_pnl: float = 0.0
     costs: float = 0.0
     net_pnl: float = 0.0
-    status: str = "OPEN"
+    status: Union[PositionStatus, str] = PositionStatus.OPEN
 
     @field_validator("symbol")
     @classmethod
@@ -60,7 +67,7 @@ class Position(BaseModel):
         if not math.isfinite(new_price) or new_price <= 0:
             raise ValueError(f"Market price must be a positive finite number, got {new_price}")
         self.current_price = float(new_price)
-        self.status = "ACTIVE"
+        self.status = PositionStatus.ACTIVE
         if self.side == OrderSide.BUY:
             self.unrealized_pnl = (self.current_price - self.entry_price) * self.quantity
         else:
@@ -106,4 +113,4 @@ class Position(BaseModel):
         self.net_pnl = self.gross_pnl - self.costs
         self.realized_pnl = self.net_pnl
         self.unrealized_pnl = 0.0
-        self.status = "CLOSED"
+        self.status = PositionStatus.CLOSED

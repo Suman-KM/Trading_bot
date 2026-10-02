@@ -98,6 +98,9 @@ class ReadinessResponse(BaseModel):
     kill_switch_active: bool
     portfolio_state_valid: bool
     unrecovered_execution_errors: int
+    database_connected: bool = True
+    persistence_healthy: bool = True
+    recovery_error: Optional[str] = None
     environment: str = "DEMO"
     trading_backend: str = "PAPER"
 
@@ -158,3 +161,9 @@ class MetricsResponse(BaseModel):
     net_pnl: float
     daily_loss_percent: float
     current_exposure_percent: float
+    database_connected: bool = True
+    persisted_orders_count: int = 0
+    persisted_positions_count: int = 0
+    persisted_executions_count: int = 0
+    persisted_audit_events_count: int = 0
+    last_persistence_timestamp: Optional[str] = None

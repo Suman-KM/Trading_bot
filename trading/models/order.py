@@ -92,9 +92,12 @@ class Order(BaseModel):
     quantity: float
     order_type: OrderType = OrderType.MARKET
     price: Optional[float] = None
+    requested_price: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     source: str = "risk_engine"
     status: OrderStatus = OrderStatus.PENDING
     fill_price: Optional[float] = None

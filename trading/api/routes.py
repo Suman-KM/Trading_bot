@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from trading.api.dependencies import (
+    TradingContext,
     get_audit_trail,
     get_execution_service,
     get_kill_switch,
     get_paper_broker,
     get_portfolio_manager,
     get_risk_engine,
+    get_trading_context,
 )
 from trading.api.schemas import (
     AccountResponse,
@@ -185,25 +187,44 @@ def get_readiness(
     risk_engine: RiskEngine = Depends(get_risk_engine),
     kill_switch: KillSwitch = Depends(get_kill_switch),
     portfolio_mgr: PortfolioManager = Depends(get_portfolio_manager),
+    context: TradingContext = Depends(get_trading_context),
 ) -> ReadinessResponse:
     """Verify internal operational readiness of the paper-trading platform."""
     account = broker.get_account()
+    db_conn = context.database_manager.is_connected() if context.database_manager else False
+    pers_healthy = context.persistence_healthy
+    daily_loss_pct = portfolio_mgr.get_daily_loss_percent()
+    daily_loss_ok = daily_loss_pct < risk_engine.limits.MAX_DAILY_LOSS_PERCENT
+    portfolio_valid = account.equity > 0
+
     is_ready = (
         broker is not None
         and risk_engine is not None
         and not kill_switch.is_active()
-        and account.equity > 0
+        and portfolio_valid
+        and db_conn
+        and pers_healthy
+        and daily_loss_ok
     )
-    return ReadinessResponse(
+    resp = ReadinessResponse(
         ready=is_ready,
         paper_broker_initialized=True,
         risk_engine_available=True,
         kill_switch_active=kill_switch.is_active(),
-        portfolio_state_valid=account.equity > 0,
+        portfolio_state_valid=portfolio_valid,
         unrecovered_execution_errors=0,
+        database_connected=db_conn,
+        persistence_healthy=pers_healthy,
+        recovery_error=context.recovery_error,
         environment="DEMO",
         trading_backend="PAPER",
     )
+    if not is_ready:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=resp.model_dump(),
+        )
+    return resp
 
 
 @router.get(
@@ -269,9 +290,12 @@ def get_audit_events(
 def get_metrics(
     broker: PaperBroker = Depends(get_paper_broker),
     portfolio_mgr: PortfolioManager = Depends(get_portfolio_manager),
+    context: TradingContext = Depends(get_trading_context),
 ) -> MetricsResponse:
     """Return operational engineering metrics (orders received, filled, costs, exposure)."""
     metrics = broker.get_metrics()
+    repo_stats = context.repository.get_persistence_stats() if context.repository else {}
+    db_conn = context.database_manager.is_connected() if context.database_manager else False
     return MetricsResponse(
         orders_received=metrics["orders_received"],
         orders_accepted=metrics["orders_accepted"],
@@ -286,4 +310,10 @@ def get_metrics(
         net_pnl=metrics["net_pnl"],
         daily_loss_percent=portfolio_mgr.get_daily_loss_percent(),
         current_exposure_percent=portfolio_mgr.get_total_exposure_percent(),
+        database_connected=db_conn,
+        persisted_orders_count=repo_stats.get("orders_count", 0),
+        persisted_positions_count=repo_stats.get("positions_count", 0),
+        persisted_executions_count=repo_stats.get("executions_count", 0),
+        persisted_audit_events_count=repo_stats.get("audit_events_count", 0),
+        last_persistence_timestamp=repo_stats.get("last_persistence_timestamp"),
     )
