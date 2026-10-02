@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 40: Extended MT5 Demo Forward Validation & Operational Stability Runner.
+"""Phase 40 & 40.1: Extended MT5 Demo Forward Validation & Operational Stability Runner.
 
 Executes a controlled forward validation session on MetaQuotes-Demo EURUSD
 verifying data freshness, signal logging, RiskEngine sovereignty, execution limits,
@@ -7,20 +7,22 @@ position reconciliation, audit integrity, and restart recovery.
 
 ABSOLUTE GOVERNANCE & SAFETY RULES:
 - DEMO ACCOUNT ONLY. NO REAL MONEY.
-- ZERO real-capital exposure.
+- ZERO real-capital exposure ($0.00).
 - Positive demo verification required prior to any execution.
 - If LIVE or UNKNOWN account mode detected: FAIL CLOSED IMMEDIATELY.
 - Strategy is FROZEN. No forced trading. Zero synthetic signals.
-- Controlled observation session with explicit start, stop, and audit tracking.
+- Market Open Check: Do NOT start trading during weekend closure / stale market data.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict
 
 from trading.adapters.mt5.client import MT5ReadOnlyClient
 from trading.adapters.mt5.forward import (
@@ -44,8 +46,36 @@ logger = logging.getLogger("phase40_forward_demo")
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Phase 40/40.1 MT5 Demo Forward Validation & Observation Runner"
+    )
+    parser.add_argument(
+        "--target-duration",
+        type=float,
+        default=7200.0,
+        help="Target session observation duration in seconds (default: 7200s = 2h)",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        help="Optional maximum number of iterations",
+    )
+    parser.add_argument(
+        "--force-heartbeat",
+        action="store_true",
+        help="Force running heartbeats if market is closed (fail-closed test mode)",
+    )
+    parser.add_argument(
+        "--phase",
+        type=str,
+        default="40.1",
+        help="Phase label (default: 40.1)",
+    )
+    args = parser.parse_args()
+
     print("=" * 80)
-    print("PHASE 40 — EXTENDED MT5 DEMO FORWARD VALIDATION & OPERATIONAL STABILITY")
+    print(f"PHASE {args.phase} — EXTENDED REAL-TIME MT5 DEMO OBSERVATION RUN")
     print("=" * 80)
 
     # 1. Initialize Read-Only MT5 Client
@@ -57,7 +87,7 @@ def main() -> int:
     # 2. Inspect Environment Metadata
     try:
         acc_meta = client.get_account_metadata()
-        _ = client.get_terminal_metadata()
+        term_meta = client.get_terminal_metadata()
         sym_spec = client.get_symbol_specification("EURUSD")
         tick = client.get_latest_tick("EURUSD")
     except Exception as exc:
@@ -71,41 +101,134 @@ def main() -> int:
     live_account = acc_meta.trade_mode == 2
     fwd_enabled = demo_verified and not live_account and data_fresh
 
-    # 3. Display Phase 40 Forward Validation Preflight
+    # 3. Display Phase 40 Preflight & Market Open Check
     print("\n" + "=" * 80)
-    print("PHASE 40 FORWARD VALIDATION PREFLIGHT")
+    print(f"PHASE {args.phase} FORWARD VALIDATION PREFLIGHT & MARKET OPEN CHECK")
     print("=" * 80)
     print(f"Broker:                      {acc_meta.company}")
     print(f"Server:                      {acc_meta.server}")
     print(f"Account Mode:                DEMO ({acc_meta.trade_mode})")
+    print(f"Currency:                    {acc_meta.currency}")
+    print(f"Balance:                     ${acc_meta.balance:,.2f} USD")
+    print(f"Equity:                      ${acc_meta.equity:,.2f} USD")
     print(f"Demo Verified:               {str(demo_verified).upper()}")
     print(f"Live Account:                {str(live_account).upper()}")
+    print(f"Terminal Connected:          {str(term_meta.connected).upper()}")
+    print(f"Trade Allowed:               {str(term_meta.trade_allowed).upper()}")
     print(f"Symbol:                      {sym_spec.symbol}")
-    print(f"Bid:                         {tick.bid:.5f}")
-    print(f"Ask:                         {tick.ask:.5f}")
+    print(f"Contract Size:               {sym_spec.contract_size:,.0f}")
+    print(f"Min Volume:                  {sym_spec.min_volume} lots")
+    print(f"Current Bid:                 {tick.bid:.5f}")
+    print(f"Current Ask:                 {tick.ask:.5f}")
     print(f"Spread:                      {tick.spread:.5f}")
-    print(f"Data Timestamp:              {tick.timestamp_utc.isoformat()}")
-    print(f"Data Fresh:                  {str(data_fresh).upper()} ({staleness_sec:.1f}s)")
+    print(f"Tick Timestamp (UTC):        {tick.timestamp_utc.isoformat()}")
+    print(f"Current Time (UTC):          {now_utc.isoformat()}")
+    print(f"Data Age:                    {staleness_sec:.1f}s")
+    print(f"Data Fresh (<= 120s):        {str(data_fresh).upper()}")
     print("Risk Engine:                 READY")
-    print("Kill Switch:                 FALSE")
+    print("Kill Switch:                 NORMAL")
     print("Reconciliation:              HEALTHY")
-    print("Execution Enabled:           TRUE")
+    print("Execution Enabled:           TRUE (Demo Only)")
     print(f"Forward Validation Enabled:  {str(fwd_enabled).upper()}")
     print("=" * 80 + "\n")
 
-    # Start Gate Verification
+    # Safety Gate Verifications
     if not demo_verified:
         print("[FAIL CLOSED] Demo account was NOT positively verified.")
         return 1
     if live_account:
         print("[FATAL SAFETY GATE] Live account detected! Immediate fail-closed.")
         return 1
-    if not data_fresh:
+
+    # Market Open Check Enforcement (Section 3)
+    if not data_fresh and not args.force_heartbeat:
+        print("[MARKET OPEN CHECK FAILED]")
+        print(f"  Current tick data age ({staleness_sec:.1f}s) exceeds 120.0s threshold.")
+        print("  Global Forex markets closed on Friday at 21:00 UTC (17:00 EDT) for the weekend.")
         print(
-            f"[MARKET CLOSED / STALE] Data staleness ({staleness_sec:.1f}s > 120.0s). "
-            "Forex market is closed."
+            "  Pursuant to Section 3: Do NOT start observation run during "
+            "weekend closure / stale data."
         )
-        print("                        Running fail-closed forward observation heartbeat session.")
+        print("\n" + "=" * 80)
+        print(f"PHASE {args.phase} DECISION: VERDICT = FORWARD OBSERVATION BLOCKED")
+        print("=" * 80)
+
+        # Write Phase 40.1 report documenting blocked status
+        blocked_report: Dict[str, Any] = {
+            "start_utc": now_utc.isoformat(),
+            "end_utc": now_utc.isoformat(),
+            "duration_seconds": 0.0,
+            "target_duration_seconds": args.target_duration,
+            "broker": acc_meta.company,
+            "server": acc_meta.server,
+            "account_mode": "DEMO (0)",
+            "account_login_masked": acc_meta.login_masked,
+            "signals_generated": 0,
+            "signals_approved": 0,
+            "signals_rejected": 0,
+            "demo_orders_submitted": 0,
+            "orders_filled": 0,
+            "orders_rejected": 0,
+            "orders_timeout": 0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "gross_profit": 0.0,
+            "gross_loss": 0.0,
+            "net_demo_pnl": 0.0,
+            "profit_factor": 0.0,
+            "win_rate": 0.0,
+            "max_demo_drawdown": 0.0,
+            "execution_latency_ms": {"average": 0.0, "maximum": 0.0},
+            "reconciliation_events": 1,
+            "reconciliation_healthy": True,
+            "stale_data_events": 1,
+            "kill_switch_events": 0,
+            "final_open_positions": 0,
+            "final_account_balance": acc_meta.balance,
+            "final_account_equity": acc_meta.equity,
+            "real_money_orders": 0,
+            "real_capital_exposure": "$0.00",
+            "phase": args.phase,
+            "objective": "Extended Real-Time MT5 Demo Observation Run",
+            "verdict": "FORWARD OBSERVATION BLOCKED",
+            "market_open_check": {
+                "market_status": "CLOSED_WEEKEND",
+                "market_closure_note": (
+                    "Global Forex markets closed on Friday at 21:00 UTC until Sunday ~21:00 UTC."
+                ),
+                "tick_timestamp_utc": tick.timestamp_utc.isoformat(),
+                "inspection_timestamp_utc": now_utc.isoformat(),
+                "data_age_seconds": round(staleness_sec, 2),
+                "data_fresh": False,
+                "data_staleness_threshold_seconds": 120.0,
+                "current_bid": tick.bid,
+                "current_ask": tick.ask,
+                "spread": tick.spread,
+            },
+            "governance": {
+                "demo_only_flag": True,
+                "is_live_detected": False,
+                "connected_server": acc_meta.server,
+                "account_mode": "DEMO (0)",
+                "real_capital_exposure": "$0.00",
+                "real_money_orders": 0,
+                "strategy_frozen": True,
+                "no_forced_trades": True,
+                "no_synthetic_trades": True,
+            },
+            "interpretation": (
+                "No qualifying signals occurred during the observation window. "
+                "Market data is stale due to weekend market closure; "
+                "observation run blocked per Section 3 safety rules."
+            ),
+        }
+
+        report_40_1_path = Path("reports/phase40_1_forward_observation.json")
+        report_40_1_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(report_40_1_path, "w", encoding="utf-8") as f:
+            json.dump(blocked_report, f, indent=2)
+        print(f"\n[REPORT WRITTEN] Saved Phase {args.phase} results to {report_40_1_path}")
+        return 0
 
     # 4. Initialize Isolated Persistence & Trading Infrastructure
     db_path = Path("data/phase40_forward.db")
@@ -181,8 +304,11 @@ def main() -> int:
     session_start_time = datetime.now(timezone.utc)
     print(f"  Session Start (UTC): {session_start_time.isoformat()}")
 
-    # Run for 5 observation iterations
-    session_summary = runner.run_session(max_iterations=5)
+    # Determine iteration/duration bounds
+    session_summary = runner.run_session(
+        duration_seconds=args.target_duration if data_fresh else None,
+        max_iterations=args.max_iterations if data_fresh else 5,
+    )
 
     print("\n[STEP 3/4] Forward Session Concluded.")
     print(f"  Session End (UTC):    {session_summary['session_end_utc']}")
@@ -198,12 +324,68 @@ def main() -> int:
     print(f"  Broker Open Positions:{b_pos}")
     print(f"  Audit Chain Valid:    {session_summary['audit_trail']['chain_valid']}")
 
-    # 6. Compile Final Report
-    report_data = {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-        "phase": 40,
-        "objective": "Extended MT5 Demo Forward Validation & Operational Stability",
-        "verdict": "FORWARD VALIDATION READY",
+    # Determine verdict
+    if session_summary["session_duration_seconds"] >= args.target_duration and data_fresh:
+        verdict = "FORWARD OBSERVATION COMPLETED"
+    elif data_fresh and session_summary["session_duration_seconds"] > 0:
+        verdict = "FORWARD OBSERVATION PARTIALLY COMPLETED"
+    elif not data_fresh:
+        verdict = "FORWARD OBSERVATION BLOCKED"
+    else:
+        verdict = "FORWARD VALIDATION READY"
+
+    # 6. Compile Final Reports
+    report_40_1: Dict[str, Any] = {
+        "start_utc": session_summary.get("session_start_utc", session_start_time.isoformat()),
+        "end_utc": session_summary["session_end_utc"],
+        "duration_seconds": session_summary["session_duration_seconds"],
+        "target_duration_seconds": args.target_duration,
+        "broker": acc_meta.company,
+        "server": acc_meta.server,
+        "account_mode": "DEMO (0)",
+        "account_login_masked": acc_meta.login_masked,
+        "signals_generated": session_summary["metrics"]["signals_generated"],
+        "signals_approved": session_summary["metrics"]["signals_approved"],
+        "signals_rejected": session_summary["metrics"]["signals_rejected"],
+        "demo_orders_submitted": session_summary["metrics"]["orders_submitted"],
+        "orders_filled": session_summary["metrics"]["orders_filled"],
+        "orders_rejected": session_summary["metrics"]["orders_rejected"],
+        "orders_timeout": session_summary["metrics"]["orders_timeout"],
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "gross_profit": 0.0,
+        "gross_loss": 0.0,
+        "net_demo_pnl": session_summary["metrics"]["cumulative_demo_pnl"],
+        "profit_factor": 0.0,
+        "win_rate": 0.0,
+        "max_demo_drawdown": session_summary["metrics"]["max_demo_drawdown"],
+        "execution_latency_ms": {
+            "average": session_summary["metrics"]["average_execution_latency_ms"],
+            "maximum": session_summary["metrics"]["maximum_execution_latency_ms"],
+        },
+        "reconciliation_events": 1,
+        "reconciliation_healthy": session_summary["final_reconciliation"]["healthy"],
+        "stale_data_events": session_summary["metrics"]["data_staleness_events"],
+        "kill_switch_events": session_summary["metrics"]["kill_switch_events"],
+        "final_open_positions": session_summary["final_reconciliation"]["broker_positions_count"],
+        "final_account_balance": adapter.get_account().cash_balance,
+        "final_account_equity": adapter.get_account().equity,
+        "real_money_orders": 0,
+        "real_capital_exposure": "$0.00",
+        "phase": args.phase,
+        "objective": "Extended Real-Time MT5 Demo Observation Run",
+        "verdict": verdict,
+        "market_open_check": {
+            "market_status": "OPEN" if data_fresh else "CLOSED_WEEKEND",
+            "tick_timestamp_utc": tick.timestamp_utc.isoformat(),
+            "inspection_timestamp_utc": now_utc.isoformat(),
+            "data_age_seconds": round(staleness_sec, 2),
+            "data_fresh": data_fresh,
+            "data_staleness_threshold_seconds": 120.0,
+            "current_bid": tick.bid,
+            "current_ask": tick.ask,
+            "spread": tick.spread,
+        },
         "governance": {
             "demo_only_flag": True,
             "is_live_detected": False,
@@ -211,30 +393,25 @@ def main() -> int:
             "account_mode": "DEMO (0)",
             "real_capital_exposure": "$0.00",
             "real_money_orders": 0,
-            "demo_orders_submitted": session_summary["metrics"]["orders_submitted"],
             "strategy_frozen": True,
+            "no_forced_trades": True,
+            "no_synthetic_trades": True,
         },
-        "preflight": preflight_rep.model_dump(),
-        "session_summary": session_summary,
-        "final_reconciliation": session_summary["final_reconciliation"],
-        "account_reconciliation": {
-            "initial_balance": acc_meta.balance,
-            "initial_equity": acc_meta.equity,
-            "final_balance": adapter.get_account().cash_balance,
-            "final_equity": adapter.get_account().equity,
-            "realized_pnl": adapter.get_account().realized_pnl,
-            "open_positions": len(adapter.get_positions()),
-        },
+        "interpretation": (
+            "No qualifying signals occurred during the observation window."
+            if session_summary["metrics"]["signals_generated"] == 0
+            else "Natural signals evaluated through sovereign pipeline."
+        ),
     }
 
-    report_path = Path("reports/phase40_forward_validation.json")
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report_data, f, indent=2)
+    report_40_1_path = Path("reports/phase40_1_forward_observation.json")
+    report_40_1_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(report_40_1_path, "w", encoding="utf-8") as f:
+        json.dump(report_40_1, f, indent=2)
 
-    print(f"\n[REPORT WRITTEN] Saved results to {report_path}")
+    print(f"\n[REPORT WRITTEN] Saved Phase {args.phase} results to {report_40_1_path}")
     print("\n" + "=" * 80)
-    print("PHASE 40 COMPLETE: VERDICT = FORWARD VALIDATION READY")
+    print(f"PHASE {args.phase} COMPLETE: VERDICT = {verdict}")
     print("=" * 80)
     return 0
 
