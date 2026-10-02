@@ -282,8 +282,16 @@ def get_readiness(
         audit_integrity_valid=audit_integrity,
         quarantine_enforced=quarantine_enforced,
         execution_service_ready=exec_service_ready,
-        mt5_adapter_available=False,
-        mt5_execution_enabled=False,
+        mt5_adapter_available=getattr(context, "mt5_adapter", None) is not None,
+        mt5_execution_enabled=bool(
+            getattr(getattr(context, "mt5_adapter", None), "execution_enabled", False)
+        ),
+        mt5_readonly_connected=bool(
+            getattr(getattr(context, "mt5_adapter", None), "is_readonly_connected", False)
+        ),
+        mt5_market_data_available=bool(
+            getattr(getattr(context, "mt5_adapter", None), "market_data_available", False)
+        ),
         recovery_error=context.recovery_error,
         environment="DEMO",
         trading_backend="PAPER",

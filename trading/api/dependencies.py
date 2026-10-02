@@ -1,6 +1,6 @@
 """Dependency injection container and providers for the FastAPI application."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from trading.audit.trail import AuditTrail
 from trading.execution.paper_broker import PaperBroker
@@ -25,7 +25,9 @@ class TradingContext:
         audit_trail: Optional[AuditTrail] = None,
         database_manager: Optional[PaperDatabaseManager] = None,
         repository: Optional[PaperTradingRepository] = None,
+        mt5_adapter: Optional[Any] = None,
     ) -> None:
+        self.mt5_adapter = mt5_adapter
         self.database_manager: PaperDatabaseManager = database_manager or PaperDatabaseManager()
         try:
             PaperSchemaMigrator.apply_migrations(self.database_manager)

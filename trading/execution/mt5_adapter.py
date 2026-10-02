@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from trading.adapters.mt5.client import MT5ReadOnlyClient
 
 from trading.audit.trail import AuditEventType, AuditTrail
 from trading.execution.adapter import BrokerAdapter
@@ -62,12 +65,14 @@ class MT5BrokerAdapter(BrokerAdapter):
         audit_trail: Optional[AuditTrail] = None,
         capabilities: Optional[BrokerCapabilities] = None,
         symbol_specs: Optional[Dict[str, BrokerSymbolSpecification]] = None,
+        client: Optional[MT5ReadOnlyClient] = None,
     ) -> None:
         self._account_id = account_id
         self._server = server
         self._execution_enabled = execution_enabled
         self._audit_trail = audit_trail
         self._capabilities = capabilities or DEFAULT_MT5_CAPABILITIES
+        self._client = client
         self._symbol_specs = symbol_specs or {
             "EURUSD": BrokerSymbolSpecification(
                 symbol="EURUSD",
@@ -98,12 +103,49 @@ class MT5BrokerAdapter(BrokerAdapter):
         """Declared broker capabilities."""
         return self._capabilities
 
+    @property
+    def readonly_client(self) -> Optional[MT5ReadOnlyClient]:
+        """Associated read-only client if configured."""
+        return self._client
+
+    @property
+    def is_readonly_connected(self) -> bool:
+        """Return True if read-only client session is connected."""
+        return bool(self._client and self._client.is_connected)
+
+    @property
+    def market_data_available(self) -> bool:
+        """Return True if read-only market data is retrievable."""
+        return self.is_readonly_connected
+
     def get_symbol_info(self, symbol: str) -> Optional[BrokerSymbolSpecification]:
         """Fetch broker symbol specifications."""
-        return self._symbol_specs.get(symbol.strip().upper())
+        sym = symbol.strip().upper()
+        if self._client and self._client.is_connected:
+            try:
+                live_spec = self._client.get_symbol_specification(sym)
+                self._symbol_specs[sym] = live_spec
+                return live_spec
+            except Exception:
+                pass
+        return self._symbol_specs.get(sym)
 
     def get_account(self) -> AccountInfo:
-        """Fetch current simulated/stub account info."""
+        """Fetch current account info."""
+        if self._client and self._client.is_connected:
+            try:
+                acc_meta = self._client.get_account_metadata()
+                return AccountInfo(
+                    initial_balance=acc_meta.balance,
+                    cash_balance=acc_meta.balance,
+                    margin_used=acc_meta.margin,
+                    realized_pnl=0.0,
+                    unrealized_pnl=round(acc_meta.equity - acc_meta.balance, 2),
+                    equity=acc_meta.equity,
+                    positions={},
+                )
+            except Exception:
+                pass
         return AccountInfo(
             initial_balance=100_000.0,
             cash_balance=100_000.0,

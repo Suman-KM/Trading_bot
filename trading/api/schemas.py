@@ -106,6 +106,8 @@ class ReadinessResponse(BaseModel):
     execution_service_ready: bool = True
     mt5_adapter_available: bool = False
     mt5_execution_enabled: bool = False
+    mt5_readonly_connected: bool = False
+    mt5_market_data_available: bool = False
     recovery_error: Optional[str] = None
     environment: str = "DEMO"
     trading_backend: str = "PAPER"
