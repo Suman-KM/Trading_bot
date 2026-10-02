@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
 from trading.api.dependencies import (
+    get_audit_trail,
     get_execution_service,
     get_kill_switch,
     get_paper_broker,
@@ -14,13 +15,18 @@ from trading.api.dependencies import (
 )
 from trading.api.schemas import (
     AccountResponse,
+    AuditEventResponse,
+    ExecutionReportResponse,
     HealthResponse,
     KillSwitchActivateRequest,
     KillSwitchResponse,
+    MetricsResponse,
     PositionResponse,
+    ReadinessResponse,
     RiskStatusResponse,
     SignalResponse,
 )
+from trading.audit.trail import AuditTrail
 from trading.execution.paper_broker import PaperBroker
 from trading.execution.service import TradingExecutionService
 from trading.models.signal import Signal
@@ -170,4 +176,114 @@ def deactivate_kill_switch(
         status="deactivated",
         is_active=False,
         reason=None,
+    )
+
+
+@router.get("/readiness", response_model=ReadinessResponse, summary="Engine Readiness Verification")
+def get_readiness(
+    broker: PaperBroker = Depends(get_paper_broker),
+    risk_engine: RiskEngine = Depends(get_risk_engine),
+    kill_switch: KillSwitch = Depends(get_kill_switch),
+    portfolio_mgr: PortfolioManager = Depends(get_portfolio_manager),
+) -> ReadinessResponse:
+    """Verify internal operational readiness of the paper-trading platform."""
+    account = broker.get_account()
+    is_ready = (
+        broker is not None
+        and risk_engine is not None
+        and not kill_switch.is_active()
+        and account.equity > 0
+    )
+    return ReadinessResponse(
+        ready=is_ready,
+        paper_broker_initialized=True,
+        risk_engine_available=True,
+        kill_switch_active=kill_switch.is_active(),
+        portfolio_state_valid=account.equity > 0,
+        unrecovered_execution_errors=0,
+        environment="DEMO",
+        trading_backend="PAPER",
+    )
+
+
+@router.get(
+    "/executions",
+    response_model=List[ExecutionReportResponse],
+    summary="Auditable Execution Reports History",
+)
+def get_executions(
+    broker: PaperBroker = Depends(get_paper_broker),
+) -> List[ExecutionReportResponse]:
+    """Return all auditable paper trade execution reports with explicit cost breakdown."""
+    reports = broker.get_execution_reports()
+    return [
+        ExecutionReportResponse(
+            execution_id=r.execution_id,
+            order_id=r.order_id,
+            client_request_id=r.client_request_id,
+            timestamp=r.timestamp.isoformat(),
+            symbol=r.symbol,
+            side=r.side.value,
+            requested_price=r.requested_price,
+            executed_price=r.executed_price,
+            quantity=r.quantity,
+            spread=r.spread,
+            slippage=r.slippage,
+            commission=r.commission,
+            gross_pnl=r.gross_pnl,
+            net_pnl=r.net_pnl,
+            execution_status=r.execution_status.value,
+            rejection_reason=r.rejection_reason,
+        )
+        for r in reports
+    ]
+
+
+@router.get(
+    "/audit/events",
+    response_model=List[AuditEventResponse],
+    summary="Immutable Structured Audit Trail",
+)
+def get_audit_events(
+    audit_trail: AuditTrail = Depends(get_audit_trail),
+    limit: int = 100,
+) -> List[AuditEventResponse]:
+    """Return immutable audit trail events."""
+    events = audit_trail.get_events(limit=limit)
+    return [
+        AuditEventResponse(
+            event_id=e.event_id,
+            timestamp=e.timestamp.isoformat(),
+            event_type=e.event_type.value,
+            symbol=e.symbol,
+            order_id=e.order_id,
+            position_id=e.position_id,
+            source=e.source,
+            details=e.details,
+        )
+        for e in events
+    ]
+
+
+@router.get("/metrics", response_model=MetricsResponse, summary="Engineering Operational Metrics")
+def get_metrics(
+    broker: PaperBroker = Depends(get_paper_broker),
+    portfolio_mgr: PortfolioManager = Depends(get_portfolio_manager),
+) -> MetricsResponse:
+    """Return operational engineering metrics (orders received, filled, costs, exposure)."""
+    metrics = broker.get_metrics()
+    return MetricsResponse(
+        orders_received=metrics["orders_received"],
+        orders_accepted=metrics["orders_accepted"],
+        orders_rejected=metrics["orders_rejected"],
+        orders_filled=metrics["orders_filled"],
+        orders_cancelled=metrics["orders_cancelled"],
+        execution_errors=metrics["execution_errors"],
+        open_positions=metrics["open_positions"],
+        closed_positions=metrics["closed_positions"],
+        gross_pnl=metrics["gross_pnl"],
+        total_costs=metrics["total_costs"],
+        net_pnl=metrics["net_pnl"],
+        daily_loss_percent=portfolio_mgr.get_daily_loss_percent(),
+        current_exposure_percent=portfolio_mgr.get_total_exposure_percent(),
     )

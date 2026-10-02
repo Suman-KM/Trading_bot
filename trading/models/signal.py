@@ -29,6 +29,7 @@ class Signal(BaseModel):
     timeframe: str
     expected_return: float
     feature_version: str
+    client_request_id: Optional[str] = None
     suggested_entry_price: Optional[float] = None
     suggested_stop_loss: Optional[float] = None
     suggested_take_profit: Optional[float] = None

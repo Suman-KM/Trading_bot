@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from trading.audit.trail import AuditTrail
 from trading.execution.paper_broker import PaperBroker
 from trading.execution.service import TradingExecutionService
 from trading.portfolio.manager import PortfolioManager
@@ -18,16 +19,23 @@ class TradingContext:
         initial_balance: float = 100_000.0,
         limits: Optional[RiskLimits] = None,
         kill_switch: Optional[KillSwitch] = None,
+        audit_trail: Optional[AuditTrail] = None,
     ) -> None:
+        self.audit_trail: AuditTrail = audit_trail or AuditTrail()
         self.limits: RiskLimits = limits or RiskLimits()
-        self.kill_switch: KillSwitch = kill_switch or KillSwitch()
+        self.kill_switch: KillSwitch = kill_switch or KillSwitch(audit_trail=self.audit_trail)
+        self.kill_switch.set_audit_trail(self.audit_trail)
         self.risk_engine: RiskEngine = RiskEngine(limits=self.limits, kill_switch=self.kill_switch)
-        self.paper_broker: PaperBroker = PaperBroker(initial_balance=initial_balance)
+        self.paper_broker: PaperBroker = PaperBroker(
+            initial_balance=initial_balance,
+            audit_trail=self.audit_trail,
+        )
         self.portfolio_manager: PortfolioManager = PortfolioManager(broker=self.paper_broker)
         self.execution_service: TradingExecutionService = TradingExecutionService(
             risk_engine=self.risk_engine,
             paper_broker=self.paper_broker,
             portfolio_manager=self.portfolio_manager,
+            audit_trail=self.audit_trail,
         )
 
 
@@ -79,3 +87,8 @@ def get_risk_engine() -> RiskEngine:
 def get_kill_switch() -> KillSwitch:
     """Dependency provider for KillSwitch."""
     return get_trading_context().kill_switch
+
+
+def get_audit_trail() -> AuditTrail:
+    """Dependency provider for AuditTrail."""
+    return get_trading_context().audit_trail

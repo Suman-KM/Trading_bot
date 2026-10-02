@@ -25,10 +25,59 @@ class OrderType(str, Enum):
 class OrderStatus(str, Enum):
     """Internal lifecycle states for orders."""
 
+    CREATED = "CREATED"
+    VALIDATED = "VALIDATED"
     PENDING = "PENDING"
+    SUBMITTED = "SUBMITTED"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
     FILLED = "FILLED"
     REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"
+    CLOSED = "CLOSED"
+
+
+# Deterministic state transition mapping
+ALLOWED_ORDER_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
+    OrderStatus.CREATED: {
+        OrderStatus.VALIDATED,
+        OrderStatus.PENDING,
+        OrderStatus.SUBMITTED,
+        OrderStatus.REJECTED,
+        OrderStatus.CANCELLED,
+    },
+    OrderStatus.VALIDATED: {
+        OrderStatus.SUBMITTED,
+        OrderStatus.PENDING,
+        OrderStatus.FILLED,
+        OrderStatus.PARTIALLY_FILLED,
+        OrderStatus.REJECTED,
+        OrderStatus.CANCELLED,
+    },
+    OrderStatus.PENDING: {
+        OrderStatus.VALIDATED,
+        OrderStatus.SUBMITTED,
+        OrderStatus.FILLED,
+        OrderStatus.PARTIALLY_FILLED,
+        OrderStatus.REJECTED,
+        OrderStatus.CANCELLED,
+    },
+    OrderStatus.SUBMITTED: {
+        OrderStatus.FILLED,
+        OrderStatus.PARTIALLY_FILLED,
+        OrderStatus.REJECTED,
+        OrderStatus.CANCELLED,
+    },
+    OrderStatus.PARTIALLY_FILLED: {
+        OrderStatus.FILLED,
+        OrderStatus.CANCELLED,
+    },
+    OrderStatus.FILLED: {
+        OrderStatus.CLOSED,
+    },
+    OrderStatus.REJECTED: set(),
+    OrderStatus.CANCELLED: set(),
+    OrderStatus.CLOSED: set(),
+}
 
 
 class Order(BaseModel):
@@ -37,6 +86,7 @@ class Order(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     order_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    client_request_id: Optional[str] = None
     symbol: str
     side: OrderSide
     quantity: float
@@ -50,6 +100,20 @@ class Order(BaseModel):
     fill_price: Optional[float] = None
     fill_timestamp: Optional[datetime] = None
     rejection_reason: Optional[str] = None
+
+    def transition_to(self, new_status: OrderStatus, reason: Optional[str] = None) -> None:
+        """Explicitly validate and execute deterministic state transitions."""
+        if new_status == self.status:
+            return
+        allowed = ALLOWED_ORDER_TRANSITIONS.get(self.status, set())
+        if new_status not in allowed:
+            raise ValueError(
+                f"Invalid order transition: cannot transition from "
+                f"{self.status.value} to {new_status.value}"
+            )
+        self.status = new_status
+        if reason:
+            self.rejection_reason = reason
 
     @field_validator("symbol")
     @classmethod
