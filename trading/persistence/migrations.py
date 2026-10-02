@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS paper_executions (
     symbol TEXT NOT NULL,
     side TEXT NOT NULL,
     requested_price REAL NOT NULL,
-    executed_price REAL NOT NULL,
+    executed_price REAL,
     quantity REAL NOT NULL,
     spread REAL NOT NULL DEFAULT 0.0,
     slippage REAL NOT NULL DEFAULT 0.0,

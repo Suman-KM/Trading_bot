@@ -196,6 +196,9 @@ class TradingExecutionService:
                 },
             )
 
+            broker_snapshot = (
+                self.broker.capture_snapshot() if hasattr(self.broker, "capture_snapshot") else None
+            )
             try:
                 # Optional database transaction wrapping state mutations
                 db_tx = (
@@ -290,6 +293,11 @@ class TradingExecutionService:
                     return _execute_pipeline()
 
             except Exception as exc:
+                if broker_snapshot is not None and hasattr(self.broker, "restore_snapshot"):
+                    try:
+                        self.broker.restore_snapshot(broker_snapshot)
+                    except Exception:
+                        pass
                 self.audit_trail.record(
                     event_type=AuditEventType.EXECUTION_ERROR,
                     symbol=signal.symbol,

@@ -100,6 +100,10 @@ class ReadinessResponse(BaseModel):
     unrecovered_execution_errors: int
     database_connected: bool = True
     persistence_healthy: bool = True
+    database_integrity_valid: bool = True
+    audit_integrity_valid: bool = True
+    quarantine_enforced: bool = True
+    execution_service_ready: bool = True
     recovery_error: Optional[str] = None
     environment: str = "DEMO"
     trading_backend: str = "PAPER"

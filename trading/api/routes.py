@@ -1,5 +1,4 @@
-"""API route handlers implementing the Paper Trading endpoints."""
-
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, status
@@ -33,6 +32,7 @@ from trading.execution.paper_broker import PaperBroker
 from trading.execution.service import TradingExecutionService
 from trading.models.signal import Signal
 from trading.portfolio.manager import PortfolioManager
+from trading.replay.data_loader import LOCKED_TEST_CUTOFF
 from trading.risk.engine import RiskEngine
 from trading.risk.kill_switch import KillSwitch
 
@@ -188,33 +188,100 @@ def get_readiness(
     kill_switch: KillSwitch = Depends(get_kill_switch),
     portfolio_mgr: PortfolioManager = Depends(get_portfolio_manager),
     context: TradingContext = Depends(get_trading_context),
-) -> ReadinessResponse:
+) -> Any:
     """Verify internal operational readiness of the paper-trading platform."""
-    account = broker.get_account()
-    db_conn = context.database_manager.is_connected() if context.database_manager else False
-    pers_healthy = context.persistence_healthy
-    daily_loss_pct = portfolio_mgr.get_daily_loss_percent()
-    daily_loss_ok = daily_loss_pct < risk_engine.limits.MAX_DAILY_LOSS_PERCENT
-    portfolio_valid = account.equity > 0
+    try:
+        account = broker.get_account() if broker else None
+        db_conn = context.database_manager.is_connected() if context.database_manager else False
+        pers_healthy = context.persistence_healthy
 
-    is_ready = (
-        broker is not None
-        and risk_engine is not None
-        and not kill_switch.is_active()
-        and portfolio_valid
-        and db_conn
-        and pers_healthy
-        and daily_loss_ok
-    )
+        # 1. Database physical integrity
+        db_integrity = False
+        if context.repository is not None and db_conn:
+            try:
+                db_integrity = context.repository.verify_integrity()
+            except Exception:
+                db_integrity = False
+        elif not context.database_manager:
+            db_integrity = True  # In-memory test context without persistent database
+
+        # 2. Audit trail cryptographic chaining integrity
+        audit_integrity = False
+        if context.repository is not None and db_conn:
+            try:
+                audit_ok, _ = context.repository.verify_audit_trail_integrity()
+                audit_integrity = audit_ok
+            except Exception:
+                audit_integrity = False
+        else:
+            audit_integrity = True
+
+        # 3. Quarantined partition cutoff enforcement
+        quarantine_enforced = LOCKED_TEST_CUTOFF == datetime(
+            2026, 2, 19, 12, 0, 0, tzinfo=timezone.utc
+        )
+
+        # 4. Execution service readiness
+        exec_service_ready = context.execution_service is not None
+
+        # 5. Portfolio & daily loss checks
+        daily_loss_pct = portfolio_mgr.get_daily_loss_percent() if portfolio_mgr else 0.0
+        daily_loss_ok = (
+            daily_loss_pct < risk_engine.limits.MAX_DAILY_LOSS_PERCENT
+            if (portfolio_mgr and risk_engine)
+            else False
+        )
+        portfolio_valid = account is not None and account.equity > 0
+        kill_switch_active = kill_switch.is_active() if kill_switch else True
+
+        is_ready = (
+            broker is not None
+            and risk_engine is not None
+            and not kill_switch_active
+            and portfolio_valid
+            and db_conn
+            and pers_healthy
+            and db_integrity
+            and audit_integrity
+            and quarantine_enforced
+            and exec_service_ready
+            and daily_loss_ok
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=ReadinessResponse(
+                ready=False,
+                paper_broker_initialized=False,
+                risk_engine_available=False,
+                kill_switch_active=True,
+                portfolio_state_valid=False,
+                unrecovered_execution_errors=1,
+                database_connected=False,
+                persistence_healthy=False,
+                database_integrity_valid=False,
+                audit_integrity_valid=False,
+                quarantine_enforced=False,
+                execution_service_ready=False,
+                recovery_error=str(exc),
+                environment="DEMO",
+                trading_backend="PAPER",
+            ).model_dump(),
+        )
+
     resp = ReadinessResponse(
         ready=is_ready,
-        paper_broker_initialized=True,
-        risk_engine_available=True,
-        kill_switch_active=kill_switch.is_active(),
+        paper_broker_initialized=broker is not None,
+        risk_engine_available=risk_engine is not None,
+        kill_switch_active=kill_switch_active,
         portfolio_state_valid=portfolio_valid,
-        unrecovered_execution_errors=0,
+        unrecovered_execution_errors=0 if is_ready else 1,
         database_connected=db_conn,
         persistence_healthy=pers_healthy,
+        database_integrity_valid=db_integrity,
+        audit_integrity_valid=audit_integrity,
+        quarantine_enforced=quarantine_enforced,
+        execution_service_ready=exec_service_ready,
         recovery_error=context.recovery_error,
         environment="DEMO",
         trading_backend="PAPER",

@@ -179,6 +179,32 @@ class PaperBroker:
         """Return list of all execution reports."""
         return [r.model_copy() for r in self._execution_reports]
 
+    def capture_snapshot(self) -> Dict[str, Any]:
+        """Capture deep copy snapshot of in-memory state for atomic rollbacks."""
+        return {
+            "initial_balance": self._initial_balance,
+            "cash_balance": self._cash_balance,
+            "gross_pnl": self._gross_pnl,
+            "total_costs": self._total_costs,
+            "realized_pnl": self._realized_pnl,
+            "positions": {k: v.model_copy(deep=True) for k, v in self._positions.items()},
+            "closed_positions": [p.model_copy(deep=True) for p in self._closed_positions],
+            "orders": {k: v.model_copy(deep=True) for k, v in self._orders.items()},
+            "execution_reports": [r.model_copy(deep=True) for r in self._execution_reports],
+        }
+
+    def restore_snapshot(self, snapshot: Dict[str, Any]) -> None:
+        """Restore in-memory state from captured snapshot."""
+        self._initial_balance = snapshot["initial_balance"]
+        self._cash_balance = snapshot["cash_balance"]
+        self._gross_pnl = snapshot["gross_pnl"]
+        self._total_costs = snapshot["total_costs"]
+        self._realized_pnl = snapshot["realized_pnl"]
+        self._positions = {k: v.model_copy(deep=True) for k, v in snapshot["positions"].items()}
+        self._closed_positions = [p.model_copy(deep=True) for p in snapshot["closed_positions"]]
+        self._orders = {k: v.model_copy(deep=True) for k, v in snapshot["orders"].items()}
+        self._execution_reports = [r.model_copy(deep=True) for r in snapshot["execution_reports"]]
+
     def update_market_price(self, symbol: str, price: float) -> Optional[Order]:
         """Update market price for a symbol, mark-to-market, and check SL/TP boundaries."""
         cleaned = symbol.strip().upper()
@@ -236,6 +262,16 @@ class PaperBroker:
 
     def submit_order(self, order: Order, current_market_price: Optional[float] = None) -> Order:
         """Execute market order with explicit validation, cost accounting, and state transition."""
+        snapshot = self.capture_snapshot()
+        try:
+            return self._submit_order_internal(order, current_market_price=current_market_price)
+        except Exception:
+            self.restore_snapshot(snapshot)
+            raise
+
+    def _submit_order_internal(
+        self, order: Order, current_market_price: Optional[float] = None
+    ) -> Order:
         # Idempotency check: if order was already submitted and final, return it
         if order.order_id in self._orders:
             existing = self._orders[order.order_id]
