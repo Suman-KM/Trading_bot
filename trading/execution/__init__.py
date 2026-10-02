@@ -11,6 +11,12 @@ from trading.execution.mt5_adapter import (
     MT5ConnectionError,
     MT5ResponseError,
 )
+from trading.execution.mt5_simulator import (
+    SimulatedBrokerResponse,
+    SimulatedMT5BrokerAdapter,
+    SimulatedMT5Transport,
+    SimulatedResponseStatus,
+)
 from trading.execution.paper_broker import PaperBroker
 from trading.execution.service import ExecutionResult, TradingExecutionService
 from trading.execution.translation import (
@@ -44,4 +50,8 @@ __all__ = [
     "MT5TradeRequest",
     "OrderTranslationError",
     "translate_order_to_mt5_request",
+    "SimulatedBrokerResponse",
+    "SimulatedMT5BrokerAdapter",
+    "SimulatedMT5Transport",
+    "SimulatedResponseStatus",
 ]

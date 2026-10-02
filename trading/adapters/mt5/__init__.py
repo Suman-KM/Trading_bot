@@ -18,6 +18,12 @@ from trading.adapters.mt5.schemas import (
     MT5TickData,
     MT5Timeframe,
 )
+from trading.execution.mt5_simulator import (
+    SimulatedBrokerResponse,
+    SimulatedMT5BrokerAdapter,
+    SimulatedMT5Transport,
+    SimulatedResponseStatus,
+)
 
 __all__ = [
     "MT5AccountMetadata",
@@ -35,4 +41,8 @@ __all__ = [
     "normalize_terminal_info",
     "normalize_tick",
     "normalize_timestamp",
+    "SimulatedBrokerResponse",
+    "SimulatedMT5BrokerAdapter",
+    "SimulatedMT5Transport",
+    "SimulatedResponseStatus",
 ]
