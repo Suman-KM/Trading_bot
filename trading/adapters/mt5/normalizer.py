@@ -172,7 +172,7 @@ def normalize_symbol_info(raw_info: Any) -> BrokerSymbolSpecification:
 
 
 def normalize_timestamp(
-    ts_val: Union[int, float, datetime],
+    ts_val: Union[int, float, str, datetime],
     broker_utc_offset_hours: float = 3.0,
 ) -> datetime:
     """Convert raw MT5 timestamp (broker server time epoch or datetime) to timezone-aware UTC."""
@@ -182,6 +182,17 @@ def normalize_timestamp(
             broker_dt = ts_val.replace(tzinfo=timezone.utc)
             return broker_dt - timedelta(hours=broker_utc_offset_hours)
         return ts_val.astimezone(timezone.utc)
+
+    if isinstance(ts_val, str):
+        ts_str = ts_val.strip()
+        try:
+            ts_val = float(ts_str)
+        except ValueError:
+            try:
+                dt = datetime.fromisoformat(ts_str)
+                return normalize_timestamp(dt, broker_utc_offset_hours=broker_utc_offset_hours)
+            except Exception:
+                raise MT5DataNormalizationError(f"Invalid timestamp string: {ts_val}")
 
     if not isinstance(ts_val, (int, float)) or not math.isfinite(ts_val) or ts_val <= 0:
         raise MT5DataNormalizationError(f"Invalid timestamp value: {ts_val}")
